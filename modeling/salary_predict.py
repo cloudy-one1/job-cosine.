@@ -10,9 +10,13 @@
 
 报告 R² 的提升(或无提升),以便调用方判断学历和经验字段是否为当前数据集增加预测信号。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
-from jobtitle import classify
+from analysis.jobtitle import classify
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
@@ -130,12 +134,12 @@ def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_expe
 if __name__ == '__main__':
     result = train_and_evaluate()
     print(f"训练样本数: {result['n_train']}, 测试样本数: {result['n_test']}")
-    print(f"仅使用 city + category          R²={result['old_r2']:.3f}  MAE={result['old_mae']:.2f}k 元")
-    print(f"使用 city + category + 学历 + 经验  R²={result['r2']:.3f}  MAE={result['mae']:.2f}k 元")
+    print(f"仅使用 city + category          R2={result['old_r2']:.3f}  MAE={result['old_mae']:.2f}k 元")
+    print(f"使用 city + category + 学历 + 经验  R2={result['r2']:.3f}  MAE={result['mae']:.2f}k 元")
     if result['r2'] > result['old_r2']:
-        print(">> 学历与经验特征提升了 R²")
+        print(">> 学历与经验特征提升了 R2")
     else:
-        print(">> 学历与经验特征未提升 R²")
+        print(">> 学历与经验特征未提升 R2")
     print(f"基线(预测为训练平均值)MAE: {result['baseline_mae']:.2f}k 元/月")
 
     print('\n预测示例:')

@@ -10,11 +10,15 @@
      连同完整对话历史再喂给大模型。
   3. 当大模型输出 Final Answer 或到达 max_steps(防止死循环)时终止。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import re
 import requests
 
-from agent_tools import TOOLS
+from agent.agent_tools import TOOLS
 
 DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 

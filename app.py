@@ -9,6 +9,13 @@
    网站只负责读取已采集好的数据并展示,不需要每次访问都现场爬一次
 3. 新增 /advice 路由,接入Agent模块
 
+项目包结构:
+  data/       — 数据采集与清洗 (scraper, parser, cleaner)
+  analysis/   — 描述性统计 (薪资、学历、经验、地区、职位分类)
+  modeling/   — 机器学习模型 (聚类、薪资预测)
+  agent/      — ReAct Agent 系统 (工具注册、推理循环)
+  templates/  — Flask 模板
+
 运行: python app.py
 访问: http://127.0.0.1:5000
 """
@@ -18,17 +25,25 @@ import re as _re
 from flask import Flask, render_template, request, redirect
 
 import config
-import xinzi
-import xueli
-import jinyan
-import region
-import jobtitle
-import job_clustering
-import salary_predict
-import python_job_scraper
-from salary_parser import parse_salary
-from agent_core import run_agent
-from agent_tools import set_model_result
+
+# --- 数据层 ---
+from data.python_job_scraper import scrape_jobs
+from data.salary_parser import parse_salary
+
+# --- 描述性统计层 ---
+import analysis.xinzi as xinzi
+import analysis.xueli as xueli
+import analysis.jinyan as jinyan
+import analysis.region as region
+import analysis.jobtitle as jobtitle
+
+# --- 建模层 ---
+import modeling.job_clustering as job_clustering
+import modeling.salary_predict as salary_predict
+from modeling.cache import update as _model_update, get as _model_get
+
+# --- Agent 层 ---
+from agent.agent_core import run_agent
 
 app = Flask(__name__)
 
@@ -39,8 +54,7 @@ PER_PAGE = 12
 # 薪资预测模型同理,训练好的模型保留在内存里复用。
 print('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
 _clustering_result = job_clustering.run_clustering()
-_salary_model_result = salary_predict.train_and_evaluate()
-set_model_result(_salary_model_result)   # 同步注入给 agent_tools,避免重复训练
+_model_update(salary_predict.train_and_evaluate())   # 注入 modeling.cache,agent 自动共享
 print('预计算完成。')
 
 
@@ -98,15 +112,16 @@ def chart():
 
 @app.route('/ml')
 def ml_page():
+    mc = _model_get()
     return render_template(
         'ml.html',
         clustering=_clustering_result,
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
-        model_r2=_salary_model_result['r2'],
-        model_old_r2=_salary_model_result['old_r2'],
-        model_mae=_salary_model_result['mae'],
-        baseline_mae=_salary_model_result['baseline_mae'],
+        model_r2=mc['r2'],
+        model_old_r2=mc['old_r2'],
+        model_mae=mc['mae'],
+        baseline_mae=mc['baseline_mae'],
     )
 
 
@@ -122,9 +137,10 @@ def predict():
     if not city or not category:
         predict_error = '请输入城市和职位类别'
     else:
+        mc = _model_get()
         pred, matched_edu, matched_exper, warns = salary_predict.predict_salary_safe(
-            _salary_model_result['model'], city, category, edu, exper,
-            _salary_model_result['valid_edu'], _salary_model_result['valid_exper'],
+            mc['model'], city, category, edu, exper,
+            mc['valid_edu'], mc['valid_exper'],
         )
         predict_result = {
             'city': city, 'category': category,
@@ -132,15 +148,16 @@ def predict():
             'warnings': warns,
         }
 
+    mc = _model_get()
     return render_template(
         'ml.html',
         clustering=_clustering_result,
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
-        model_r2=_salary_model_result['r2'],
-        model_old_r2=_salary_model_result['old_r2'],
-        model_mae=_salary_model_result['mae'],
-        baseline_mae=_salary_model_result['baseline_mae'],
+        model_r2=mc['r2'],
+        model_old_r2=mc['old_r2'],
+        model_mae=mc['mae'],
+        baseline_mae=mc['baseline_mae'],
         predict_error=predict_error,
         predict_result=predict_result,
     )
@@ -177,7 +194,7 @@ def collect():
         return render_template('collect.html', error='请输入采集关键词')
 
     try:
-        jobs = python_job_scraper.scrape_jobs(keyword, cities, pages_per_city=pages)
+        jobs = scrape_jobs(keyword, cities, pages_per_city=pages)
     except Exception as e:
         return render_template('collect.html', error=f'采集出错: {e}',
                                 keyword=keyword, city=city_raw)
@@ -212,10 +229,9 @@ def collect():
 
     # 数据变了,聚类和薪资预测模型(在app启动时算过一次缓存住)
     # 也要跟着重新算一遍,否则 /chart 和 /ml 页面会显示基于旧数据的结果
-    global _clustering_result, _salary_model_result
+    global _clustering_result
     _clustering_result = job_clustering.run_clustering()
-    _salary_model_result = salary_predict.train_and_evaluate()
-    set_model_result(_salary_model_result)   # agent 模型同步更新
+    _model_update(salary_predict.train_and_evaluate())   # 同步更新建模缓存,agent 自动看到新模型
 
     return render_template(
         'collect.html', success_count=success, total_count=len(jobs),
@@ -248,7 +264,4 @@ if __name__ == '__main__':
     # debug=True: 保留调试模式,出错时会显示详细的堆栈信息(方便排查问题)
     # use_reloader=False: 关闭文件变化自动重启,防止IDE保存文件导致正在
     # 进行的实时采集被中断(采集过程中Flask重启会让浏览器出现ERR_CONNECTION_RESET)
-    # 注意: 之前批量修改了十几个文件的注释,导致所有文件的修改时间都是"刚刚",
-    # Flask 的 watchdog 会误以为文件持续在变化而反复重启,这是为什么之前没问题、
-    # 改了注释后才出现问题的根因
     app.run(debug=True, host='0.0.0.0', threaded=True, use_reloader=False)

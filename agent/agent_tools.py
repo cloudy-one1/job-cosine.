@@ -6,34 +6,22 @@
 * 返回 JSON 友好的数据(列表 / 字典 / 数字 / 字符串)。
 * 不得编造数据库中不存在的数值。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
-from jobtitle import classify
-from xueli import xuelifun
-from jinyan import jinyanfun
-from salary_predict import train_and_evaluate, predict_salary_safe as _predict_salary_safe
+from analysis.jobtitle import classify
+from analysis.xueli import xuelifun
+from analysis.jinyan import jinyanfun
+from analysis.region import extract_city
+from modeling.salary_predict import predict_salary_safe as _predict_salary_safe
+# 模型缓存 (与 app.py 共享同一个训练好的模型实例,消除重复训练)
+from modeling.cache import get as _get_model_result
 
-# 不在模块加载时训练模型,而是由 app.py 在启动时训练完毕后注入。
-# 如果 app.py 尚未注入就尝试调用预测(例如直接运行本文件),按需懒加载。
-_model_result = None
-
-
-def _get_model_result():
-    """返回缓存的模型结果;若尚未注入,按需训练(直接运行本文件时的后备路径)。"""
-    global _model_result
-    if _model_result is None:
-        _model_result = train_and_evaluate()
-    return _model_result
-
-
-def set_model_result(result):
-    """供 app.py 调用,将训练好的模型注入到 agent 工具模块中。
-
-    在 app 启动时与 /collect 重新采集后调用,保证 agent 使用的模型
-    与 /ml 页面展示的指标始终一致。
-    """
-    global _model_result
-    _model_result = result
+# 保留 set_model_result 别名以保持向后兼容;新代码应直接用 modeling.cache.update()
+from modeling.cache import update as set_model_result
 
 
 def edu_overview() -> list:
@@ -60,7 +48,7 @@ def predict_salary(city: str, category: str, edu: str = '不限', exper: str = '
         'exper': matched_exper,
         'predicted_salary_k': pred,
         'model_r2': round(model_result['r2'], 2),
-        'note': f"模型 R² = {model_result['r2']:.2f}(加入学历与经验特征前为 {model_result['old_r2']:.2f})。样本量较小,预测仅供参考。",
+        'note': f"模型 R2 = {model_result['r2']:.2f}(加入学历与经验特征前为 {model_result['old_r2']:.2f})。样本量较小,预测仅供参考。",
     }
     if warns:
         result['input_warnings'] = warns
@@ -133,7 +121,7 @@ def city_overview() -> list:
 
     city_data = {}
     for addr, smin, smax in rows:
-        city = addr.split('-')[0] if addr else '未知'
+        city = extract_city(addr)
         city_data.setdefault(city, []).append((smin + smax) / 2 if (smin or smax) else 0)
 
     result = []

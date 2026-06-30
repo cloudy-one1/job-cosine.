@@ -8,7 +8,7 @@ agent_core 中 ReAct 循环的集成测试。
 验证 agent 产生预期的 trace(一次 action 轮次后跟着一次 final-answer 轮次),
 全程不触及网络。
 """
-from agent_core import run_agent
+from agent.agent_core import run_agent
 
 call_count = {'n': 0}
 

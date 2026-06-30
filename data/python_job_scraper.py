@@ -13,12 +13,16 @@ scrape_jobs() 拿到结果,不需要再改代码。
          playwright install chromium
 
 用法(命令行直接跑,效果跟网页上的"实时采集"完全一致——直接写入data.db):
-    python python_job_scraper.py
+    python data/python_job_scraper.py
 
 用法(被其他代码调用,比如Flask路由):
-    from python_job_scraper import scrape_jobs
+    from data.python_job_scraper import scrape_jobs
     jobs = scrape_jobs(keyword='java', cities=['杭州', '成都'], pages_per_city=2)
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import time
 import random
 from datetime import datetime, timezone
@@ -216,7 +220,7 @@ def scrape_jobs(keyword, cities, pages_per_city=3, progress_callback=None):
 if __name__ == '__main__':
     import sqlite3
     import config
-    from salary_parser import parse_salary
+    from data.salary_parser import parse_salary
 
     jobs = scrape_jobs(
         keyword='python',

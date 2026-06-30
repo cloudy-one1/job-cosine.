@@ -11,6 +11,10 @@ salary_predict 模块用于生成线性回归模型的 category 特征。
 规则列表是模块级常量,便于阅读者快速了解分类体系,也便于修改而无需理解
 周边代码。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
 from pandas import DataFrame

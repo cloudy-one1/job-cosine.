@@ -4,6 +4,10 @@
 统计 data 表中每个不同 exper 值的出现次数,返回 [[标签, 数量], ...]
 按频率从大到小排序。空值合并为 "经验不限"。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
 from pandas import DataFrame

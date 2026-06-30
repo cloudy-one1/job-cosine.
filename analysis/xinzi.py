@@ -4,6 +4,10 @@
 将 (salary_min + salary_max) / 2 分桶到固定区间,返回每个桶的数量。
 用于 /chart 页面渲染薪资分布图表。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
 import pandas as pd

@@ -7,6 +7,10 @@
 特意采用轻量化、纯 sklearn 实现。典型采集数据约 <1000 行,更复杂的模型反而容易过拟合。
 主要耗时在 jieba 分词与轮廓系数计算,两者均在 Flask 启动时预计算并缓存,避免页面刷新时重复运算。
 """
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import sqlite3
 import config
 import jieba

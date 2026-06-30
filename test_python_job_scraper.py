@@ -3,7 +3,7 @@ python_job_scraper.build_api_params 函数的单元测试。
 """
 import time
 import pytest
-from python_job_scraper import build_api_params
+from data.python_job_scraper import build_api_params
 
 
 class TestBuildApiParams:
