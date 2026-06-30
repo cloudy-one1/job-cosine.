@@ -1,5 +1,5 @@
 """
-单元测试: python_job_scraper.build_api_params
+python_job_scraper.build_api_params 函数的单元测试。
 """
 import time
 import pytest
@@ -7,10 +7,10 @@ from python_job_scraper import build_api_params
 
 
 class TestBuildApiParams:
-    """测试 build_api_params 函数"""
+    """验证 build_api_params 返回的参数字典结构与关键行为。"""
 
     def test_basic_return_type(self):
-        """测试函数返回类型为字典"""
+        """返回类型必须是 dict"""
         result = build_api_params('python', '010000', 1)
         assert isinstance(result, dict)
 

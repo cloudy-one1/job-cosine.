@@ -1,10 +1,12 @@
 """
-用一个"假LLM"测试 agent_core.py 的循环逻辑本身对不对,
-不需要真实API key,也不消耗DeepSeek的调用额度。
+agent_core 中 ReAct 循环的集成测试。
 
-思路:模拟LLM在第1轮决定调用 query_jobs 工具,
-      看到Observation后在第2轮给出Final Answer,
-      验证整个循环(解析格式→执行工具→拼接Observation→再次调用LLM)是否正常工作。
+用确定性的假 LLM 替换真实的 DeepSeek 调用:
+  * 第 1 轮:模拟 LLM 输出 query_jobs 工具调用
+  * 第 2 轮:模拟 LLM 在看到 Observation 后输出 Final Answer
+
+验证 agent 产生预期的 trace(一次 action 轮次后跟着一次 final-answer 轮次),
+全程不触及网络。
 """
 from agent_core import run_agent
 
@@ -12,7 +14,7 @@ call_count = {'n': 0}
 
 
 def fake_llm(messages):
-    """模拟LLM的多轮响应,不调用真实API"""
+    """确定性 LLM 存根,用于在无网络情况下测试 ReAct 循环。"""
     call_count['n'] += 1
     if call_count['n'] == 1:
         return (

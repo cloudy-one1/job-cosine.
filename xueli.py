@@ -1,7 +1,8 @@
 """
-学历分析 —— 教材4.5.4节 xueli.py 的真正实现。
-之前用 region.py(地区分析)替代这个位置,是因为旧数据集没有真实学历字段;
-现在新采集的数据里 edu 字段是真实值,这个模块可以恢复成教材原本想做的样子。
+学历分布统计。
+
+统计 data 表中每个不同 edu 值的出现次数,返回 [[标签, 数量], ...]
+按频率从大到小排序。空值合并为 "不限"。
 """
 import sqlite3
 import config
@@ -15,7 +16,7 @@ def get_edu():
         cursor.execute("select edu from data")
         return cursor.fetchall()
     except Exception as e:
-        print('查询失败:', e)
+        print('query failed:', e)
         return []
     finally:
         db.close()

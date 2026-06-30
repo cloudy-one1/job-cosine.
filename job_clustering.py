@@ -1,23 +1,11 @@
 """
-职位类别聚类(KMeans) —— 跟 jobtitle.py 的规则匹配方法形成对比。
+职位标题无监督聚类。
 
-两种方法的本质区别(写报告/答�antml辩时可以直接用这段对比):
-- jobtitle.py: 人工预设关键词规则("包含'爬虫'就归为爬虫工程师"),
-  优点是可解释、可控;缺点是类别由人主观定义,没有用到数据本身的结构。
-- 本文件: 不预设任何类别,让KMeans从职位名称的文本特征里自己"发现"
-  聚类结构;优点是数据驱动;缺点是聚类出来的"类别"需要人工看关键词
-  才能理解它实际代表什么,可解释性比规则方法差。
+处理流程:jieba 中文分词 -> TF-IDF 向量化 -> 使用轮廓系数选择 k 值的 KMeans 聚类 ->
+输出每个聚类的高权重关键词摘要。
 
-技术流程:
-1. jieba 对职位名称做中文分词
-2. TF-IDF 把分词结果转成数值向量(每个词的重要程度)
-3. KMeans 把这些向量分成 k 组
-4. 每组挑出TF-IDF权重最高的几个词,作为这一组的"自动标签"
-   (因为KMeans本身只给出"第几组",不会告诉你这组代表什么,
-   这一步是为了让聚类结果变得可读)
-
-k 的选择:用轮廓系数(silhouette score)在 4~11 之间扫一遍,
-选分数最高的 k,而不是随手指定一个数字。
+特意采用轻量化、纯 sklearn 实现。典型采集数据约 <1000 行,更复杂的模型反而容易过拟合。
+主要耗时在 jieba 分词与轮廓系数计算,两者均在 Flask 启动时预计算并缓存,避免页面刷新时重复运算。
 """
 import sqlite3
 import config
@@ -39,7 +27,8 @@ def get_posts():
 
 import re
 
-# 标点符号 + 在这份"全是python岗位"的数据里几乎每条都出现、没有区分度的词
+# 几乎每个职位都会出现的高频词,对分类无贡献。
+# 同时包含标点符号,由下方正则表达式过滤。
 STOPWORDS = {
     'python', '工程师', '开发', '软件', '(', ')', '（', '）', '/', '、',
     '-', '－', '岗位', '招聘', '需求', '相关', '方向', '人员',
@@ -62,23 +51,15 @@ def tokenize(text):
 
 
 def choose_best_k(X, k_range=None):
-    """
-    用轮廓系数选k,而不是随手定一个数字。
+    """遍历候选 k 值,选择轮廓系数最高的一个。
 
-    k_range默认是4~11,但如果样本数太少(比如一次实时采集只抓到几条数据),
-    会动态把上限降到"样本数-1"以内,避免KMeans直接报错崩溃
-    (这是实测踩到的真实边界情况: 采集结果很少时整个/collect请求会500)。
-
-    另外,即使k设置合理,如果样本里的文本特征太相似(小样本时常见),
-    KMeans实际收敛出来的类别数可能比设定的k更少,导致只剩1类——
-    这种"退化"情况下轮廓系数算不出来(silhouette_score要求至少2个
-    不同类别),这里直接跳过这个k,而不是让程序崩溃。
+    当样本数过小或每次聚类都退化为单簇时,回退到 k=1(无有意义的聚类)。
+    这两种情况在小范围采集运行中常出现,必须妥善处理以免程序崩溃。
     """
     n_samples = X.shape[0]
     max_k = min(11, n_samples - 1)
 
     if max_k < 2:
-        # 样本太少(比如只有1-2条),没法做有意义的聚类,直接返回k=1
         return 1, {1: 0.0}
 
     if k_range is None:
@@ -90,11 +71,10 @@ def choose_best_k(X, k_range=None):
         labels = km.fit_predict(X)
         n_distinct = len(set(labels))
         if n_distinct < 2 or n_distinct > n_samples - 1:
-            continue  # 这个k实际退化了,跳过,不计算轮廓系数
+            continue
         scores[k] = silhouette_score(X, labels)
 
     if not scores:
-        # 所有k都退化了(样本太少或文本太相似,聚类没有意义),退回k=1
         return 1, {1: 0.0}
 
     best_k = max(scores, key=scores.get)
@@ -103,9 +83,8 @@ def choose_best_k(X, k_range=None):
 
 def run_clustering(k=None):
     posts = get_posts()
-    # min_df=2 要求一个词至少在2篇文档里出现才纳入词表,样本量正常时这样能
-    # 过滤掉只出现一次的噪声词;但样本太少时(比如一次实时采集只抓到几条),
-    # 这个要求可能完全无法满足,导致报错,这里动态降级成min_df=1
+    # 正常大小数据使用 min_df=2 过滤稀有词;当数据集很小时(例如非常新、非常窄范围的一次采集),
+    # 放宽为 min_df=1,保证向量化器仍能输出有效结果。
     min_df = 2 if len(posts) >= 20 else 1
     vectorizer = TfidfVectorizer(tokenizer=tokenize, token_pattern=None, min_df=min_df)
     X = vectorizer.fit_transform(posts)
@@ -138,12 +117,12 @@ def run_clustering(k=None):
 
 if __name__ == '__main__':
     output = run_clustering()
-    print(f"自动选出的最佳聚类数 k = {output['k']}")
+    print(f"自动选择的聚类数 k = {output['k']}")
     if output['k_scores']:
-        print('各k值对应的轮廓系数(越接近1越好,这份数据规模小,普遍不会很高):')
+        print('每个候选 k 的轮廓系数:')
         for k, score in output['k_scores'].items():
             print(f'  k={k}: {score:.3f}')
-    print('\n聚类结果(按数量从多到少排序):')
+    print('\n聚类结果(按规模从大到小):')
     for c in output['clusters']:
-        print(f"  簇{c['cluster_id']} [自动标签: {c['auto_label']}] "
+        print(f"  聚类 {c['cluster_id']} [标签: {c['auto_label']}] "
               f"数量={c['count']} 关键词={c['top_keywords']}")

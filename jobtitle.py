@@ -1,24 +1,15 @@
 """
-职位类别占比统计 —— 替换原来"工作年限要求"饼图的位置。
+职位标题分类。
 
-教材原 jinyan.py 是 SELECT exper FROM data 做 value_counts();
-这里改成 SELECT post FROM data,用一套自定义、写在代码里、完全可复现的
-关键词规则对职位名称分类,再做同样的 value_counts() 统计。
+对 data 表中的每个 post 值应用关键词优先匹配规则集,统计得到的类别,
+返回 [[类别, 数量], ...] 按频率从大到小排序。classify 辅助函数也被
+salary_predict 模块用于生成线性回归模型的 category 特征。
 
-分类规则按下面顺序匹配(命中第一个就归类,没命中任何关键词归入"通用开发"):
-    爬虫 -> 爬虫工程师
-    架构师 -> 架构师
-    讲师 -> 培训讲师
-    实习 -> 实习生
-    测试 -> 测试工程师
-    运维 -> 运维工程师
-    数据|挖掘|大数据 -> 数据相关
-    后端|后台|服务端 -> 后端开发
-    web|前端 (不区分大小写) -> Web开发
-    高级|资深|中级 -> 高级/资深开发
-    默认 -> 通用开发
+分类逻辑设计简单:每个职位按顺序匹配关键词,并打上第一个触发的类别标签。
+没有匹配到任何关键词的职位回退到 "通用开发"。
 
-这套规则你可以根据实际数据再调整,关键是写进报告时要能讲清楚分类依据是什么。
+规则列表是模块级常量,便于阅读者快速了解分类体系,也便于修改而无需理解
+周边代码。
 """
 import sqlite3
 import config
@@ -46,6 +37,7 @@ RULES = [
 
 
 def classify(post_title):
+    """使用 RULES 为单个职位标题分配类别标签。"""
     title_lower = post_title.lower()
     for keyword, category in RULES:
         if keyword.lower() in title_lower:
@@ -58,10 +50,9 @@ def get_post():
     try:
         cursor = db.cursor()
         cursor.execute("select post from data")
-        result = cursor.fetchall()
-        return result
+        return cursor.fetchall()
     except Exception as e:
-        print('查询失败:', e)
+        print('query failed:', e)
         return []
     finally:
         db.close()
@@ -71,8 +62,7 @@ def jobtitlefun():
     rows = get_post()
     categories = [classify(row[0]) for row in rows if row[0]]
 
-    data = DataFrame(categories)
-    counts = data[0].value_counts()
+    counts = DataFrame(categories)[0].value_counts()
 
     list_all = []
     for category, count in zip(counts.index, counts):

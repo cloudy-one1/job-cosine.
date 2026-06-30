@@ -1,7 +1,8 @@
 """
-薪资分布统计 —— 替代教材 xinzi.py。
-逻辑跟教材一致(把薪资分到几个区间,统计每个区间的职位数量),
-只是把MySQL连接换成SQLite,单位也对齐成我们数据库里存的"千元/月"。
+薪资分布统计。
+
+将 (salary_min + salary_max) / 2 分桶到固定区间,返回每个桶的数量。
+用于 /chart 页面渲染薪资分布图表。
 """
 import sqlite3
 import config
@@ -15,7 +16,7 @@ def get_salary():
         cursor.execute("select salary_min, salary_max from data")
         return cursor.fetchall()
     except Exception as e:
-        print('查询失败:', e)
+        print('query failed:', e)
         return []
     finally:
         db.close()
@@ -29,12 +30,12 @@ def xinzi():
             data.append((smin + smax) / 2)
 
     bins = [0, 5, 8, 11, 14, 17, 20, 23, 999999]
-    labels = ['小于5k', '5k~8k', '8k~11k', '11k~14k', '14k~17k', '17k~20k', '20k~23k', '23k以上']
+    labels = ['<5k', '5-8k', '8-11k', '11-14k', '14-17k', '17-20k', '20-23k', '23k+']
 
-    fenzu = pd.cut(data, bins, labels=labels, right=False)
-    pinshu = fenzu.value_counts().reindex(labels)
+    groups = pd.cut(data, bins, labels=labels, right=False)
+    counts = groups.value_counts().reindex(labels)
 
-    return [int(pinshu.get(label, 0)) for label in labels]
+    return [int(counts.get(label, 0)) for label in labels]
 
 
 if __name__ == '__main__':

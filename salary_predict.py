@@ -1,12 +1,14 @@
 """
-薪资预测模型 —— 用"城市 + 职位类别 + 学历 + 经验"预测薪资水平。
+薪资预测模型。
 
-更新说明: 之前数据集没有真实的学历/经验字段,模型只能用城市+职位类别两个特征。
-现在新采集的数据里这两项是真实值,这里同时训练"旧特征版"和"新特征版"两个模型,
-对比R²的变化,用真实数字说话——而不是想当然地说"加了新特征肯定更准"。
+基于 (城市, 职位类别, 学历, 经验) 元组训练线性回归。模型特意设计得简单:
+训练数据约 500 行级别,比线性回归更复杂的模型会严重过拟合。
 
-诚实声明: 即便特征更全,650条左右的小样本+线性回归,R²仍然不会很高,
-这是数据规模的客观局限,不是模型设计的问题。
+训练两个版本模型进行对比:
+* 仅使用 city + category (基线模型)
+* 使用 city + category + education + experience (全特征集)
+
+报告 R² 的提升(或无提升),以便调用方判断学历和经验字段是否为当前数据集增加预测信号。
 """
 import sqlite3
 import config
@@ -35,7 +37,7 @@ def build_dataset(include_edu_exper=True):
     for post, addr, smin, smax, edu, exper in rows:
         if not smin and not smax:
             continue
-        city = addr.split('-')[0] if addr else '未知'
+        city = addr.split('-')[0] if addr else 'Unknown'
         category = classify(post)
         avg_salary = (smin + smax) / 2
         if include_edu_exper:
@@ -77,20 +79,14 @@ def _train_one(include_edu_exper, random_state=42):
 
 
 def train_and_evaluate(random_state=42):
-    """
-    训练两个版本: 城市+类别(旧特征) vs 城市+类别+学历+经验(新特征),
-    返回新特征版本作为主模型(用于实际预测),同时保留两版的指标用于对比展示。
-    """
+    """训练全特征模型和基线模型。返回全特征模型的结果字典,附加基线 R² 用于对比。"""
     old_result = _train_one(include_edu_exper=False, random_state=random_state)
     new_result = _train_one(include_edu_exper=True, random_state=random_state)
 
     new_result['old_r2'] = old_result['r2']
     new_result['old_mae'] = old_result['mae']
 
-    # 记录训练数据里真实出现过的学历/经验取值,供predict_salary校验用户输入。
-    # 模型本身的OneHotEncoder对没见过的取值会静默忽略(handle_unknown='ignore'),
-    # 不会报错,但预测结果会因为缺了这个特征的信息而变得不可靠,
-    # 这是实测踩到的真实问题(比如输入"3"而不是"3-5年",会被直接忽略掉)。
+    # 记录训练时观察到的类别水平,以便下游调用方在请求值未见过时发出警告
     X, _ = build_dataset(include_edu_exper=True)
     new_result['valid_edu'] = sorted(set(X[:, 2]))
     new_result['valid_exper'] = sorted(set(X[:, 3]))
@@ -103,10 +99,8 @@ def predict_salary(model, city, category, edu='不限', exper='经验不限'):
 
 
 def _fuzzy_match(value, valid_values, fallback):
-    """
-    如果value不在训练数据出现过的标准取值里,尝试找一个"包含value"的有效值
-    (比如输入"3"匹配到"3-5年"),找不到就退回fallback。
-    返回 (matched_value, 是否发生了替换)。
+    """返回 (匹配后的值, 是否发生替换) 元组。
+    如果 value 不在 valid_values 中,尝试找到包含 value 的条目。否则回退到提供的默认值。
     """
     if not value or value in valid_values:
         return (value or fallback), False
@@ -117,14 +111,9 @@ def _fuzzy_match(value, valid_values, fallback):
 
 
 def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_exper):
-    """
-    带输入校验的预测包装。
-
-    背景: OneHotEncoder(handle_unknown='ignore') 对没见过的取值是静默忽略的,
-    不会报错,但会导致那个特征对预测完全不起作用,产生看起来很离谱的结果
-    (实测踩到过: 输入经验"3"而不是训练数据里的"3-5年"格式,经验信息被
-    整个丢弃,预测出"实习生比资深岗位薪资还高"这种不合理结果)。
-    这个函数在调用模型之前,先做一次模糊匹配+给出警告,而不是让错误静默发生。
+    """predict_salary 的包装函数:当调用方传入训练数据中没有的学历或经验值时发出警告
+    (而不是默默给出错误预测)。OneHotEncoder(handle_unknown='ignore') 会丢弃未见过的列,
+    这会悄悄改变特征向量,导致用户输入数字期望匹配 "3-5年" 风格类别时产生无意义预测。
     """
     warnings = []
     matched_edu, edu_sub = _fuzzy_match(edu, valid_edu, '不限')
@@ -141,19 +130,18 @@ def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_expe
 if __name__ == '__main__':
     result = train_and_evaluate()
     print(f"训练样本数: {result['n_train']}, 测试样本数: {result['n_test']}")
-    print(f"旧特征(城市+类别)        R²={result['old_r2']:.3f}  MAE={result['old_mae']:.2f}千元")
-    print(f"新特征(+学历+经验)       R²={result['r2']:.3f}  MAE={result['mae']:.2f}千元")
+    print(f"仅使用 city + category          R²={result['old_r2']:.3f}  MAE={result['old_mae']:.2f}k 元")
+    print(f"使用 city + category + 学历 + 经验  R²={result['r2']:.3f}  MAE={result['mae']:.2f}k 元")
     if result['r2'] > result['old_r2']:
-        print(">>> 加入学历+经验后R²提升,说明这两个特征确实带来了额外信息量")
+        print(">> 学历与经验特征提升了 R²")
     else:
-        print(">>> 加入学历+经验后R²没有提升(甚至下降),可能是特征类别太多、样本被进一步稀释")
-    print(f"基准线 MAE(直接猜平均值): {result['baseline_mae']:.2f} 千元/月")
+        print(">> 学历与经验特征未提升 R²")
+    print(f"基线(预测为训练平均值)MAE: {result['baseline_mae']:.2f}k 元/月")
 
-    print('\n示例预测:')
-    for city, cat, edu, exper in [
+    print('\n预测示例:')
+    for city, cat, edu, exp in [
         ('北京', '爬虫工程师', '本科', '3-5年'),
-        ('上海', '通用开发', '大专', '1年以下'),
+        ('上海', '后端开发', '大专', '1-3年'),
     ]:
-        pred = predict_salary(result['model'], city, cat, edu, exper)
-        print(f"  {city}+{cat}+{edu}+{exper}: 预测薪资约 {pred} 千元/月")
-
+        pred = predict_salary(result['model'], city, cat, edu, exp)
+        print(f"  {city} + {cat} + {edu} + {exp} -> {pred}k 元/月")

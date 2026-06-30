@@ -1,4 +1,9 @@
+"""
+工作经验要求分布统计。
 
+统计 data 表中每个不同 exper 值的出现次数,返回 [[标签, 数量], ...]
+按频率从大到小排序。空值合并为 "经验不限"。
+"""
 import sqlite3
 import config
 from pandas import DataFrame
@@ -11,7 +16,7 @@ def get_exper():
         cursor.execute("select exper from data")
         return cursor.fetchall()
     except Exception as e:
-        print('查询失败:', e)
+        print('query failed:', e)
         return []
     finally:
         db.close()

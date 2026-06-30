@@ -1,16 +1,14 @@
 """
-完整Flask主程序 —— 替代教材 app.py。
+招聘数据分析项目的 Flask 主程序。
 
-跟教材的主要区别:
-1. 数据库换成SQLite,不再需要Flask-SQLAlchemy这层ORM,
-   直接用sqlite3做查询,跟项目里其他模块(region.py/jobtitle.py等)风格一致
-2. 首页不再触发"实时爬虫",数据采集(collect_data.py)和网站展示是分离的两步
-   ——这本身也是更合理的架构:数据采集可以独立、定期运行,
-   网站只负责读取已采集好的数据并展示,不需要每次访问都现场爬一次
-3. 新增 /advice 路由,接入Agent模块
-
-运行: python app.py
-访问: http://127.0.0.1:5000
+路由表:
+  GET  /           -> 首页(输入关键词和城市表单)
+  GET  /list       -> 分页职位列表,支持按关键词和城市过滤
+  GET  /chart      -> 薪资 / 学历 / 经验分布图表页
+  GET  /ml         -> 聚类 + 规则分类 + 薪资预测展示页
+  POST /predict    -> 根据城市和职位类别预测薪资
+  GET|POST /collect-> 触发一次实时数据采集
+  GET|POST /advice -> 与基于大模型的求职助手对话
 """
 import sqlite3
 import re as _re
@@ -33,10 +31,9 @@ app = Flask(__name__)
 
 PER_PAGE = 12
 
-# 聚类计算(jieba分词+TFIDF+KMeans选k)耗时几秒,在app启动时算一次缓存住,
-# 不要让每次访问页面都重新跑一遍,否则用户体验很差。
-# 薪资预测模型同理,训练好的模型保留在内存里复用。
-print('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
+# 启动时预计算代价较大的两个模块(聚类 jieba + TF-IDF + KMeans 轮询 约数秒;
+# 线性回归也有开销)。结果缓存在进程内,以便页面加载速度保持稳定。
+print('正在预计算聚类结果与薪资预测模型...')
 _clustering_result = job_clustering.run_clustering()
 _salary_model_result = salary_predict.train_and_evaluate()
 print('预计算完成。')
@@ -146,30 +143,24 @@ def predict():
 
 @app.route('/collect', methods=['GET', 'POST'])
 def collect():
-    """
-    用户指定关键词+城市,触发一次真实的51job实时采集(Playwright+stealth),
-    采集结果写入data表,供后续所有分析(图表/聚类/预测/Agent)直接使用。
+    """使用 Playwright + stealth 绕过 WAF,实时采集 51job 职位。
 
-    表单本身在首页(input.html),这里只处理提交;GET请求(比如直接访问
-    这个URL)重定向回首页,避免出现两份重复的输入框。
-
-    注意: 这是同步阻塞调用,一次采集通常耗时10秒(过WAF)+每页约1秒,
-    城市和页数设了上限,避免单次请求耗时过长。
+    采集结果写入 data 表,并刷新进程内的聚类和薪资预测缓存,
+    以便统计页能立刻反映新数据。注意:该路由是阻塞式的,可能较慢。
     """
     if request.method != 'POST':
         return redirect('/')
 
     keyword = request.form.get('kw', '').strip()
     city_raw = request.form.get('city', '').strip()
-    # 同时支持中文逗号"，"、英文逗号","、空格分隔,
-    # 之前只认英文逗号,用户用中文输入法打的全角逗号"，"不会被拆开,
-    # 导致整段文字被当成一个城市名传进去(实测踩到的真实bug)
+    # 同时接受中英文逗号、空白分隔的多个城市,避免中文输入法下输入的纯中文逗号
+    # 被整合成一个"城市"字符串导致下游匹配失败。
     cities = [c.strip() for c in _re.split(r'[,，\s]+', city_raw) if c.strip()]
     try:
         pages = int(request.form.get('pages', 2))
     except ValueError:
         pages = 2
-    pages = max(1, min(pages, 5))  # 安全上限,防止单次请求耗时过长
+    pages = max(1, min(pages, 5))
 
     if not keyword:
         return render_template('collect.html', error='请输入采集关键词')
@@ -183,14 +174,12 @@ def collect():
     if not jobs:
         return render_template(
             'collect.html',
-            error='没有采集到任何数据,可能是WAF拦截了这次请求,或者关键词/城市没有匹配结果,换个关键词或稍后再试',
+            error='没有采集到任何数据,可能是WAF拦截了这次请求,换个关键词或稍后再试',
             keyword=keyword, city=city_raw,
         )
 
     db = sqlite3.connect(config.DB_PATH)
     cursor = db.cursor()
-    # 每次实时采集都是一次新的分析案例,清空上一次的结果,
-    # 跟教材4.4.6节 data_clr() 的设计思路一致
     cursor.execute("DELETE FROM data")
     success = 0
     for j in jobs:
@@ -208,8 +197,7 @@ def collect():
     db.commit()
     db.close()
 
-    # 数据变了,聚类和薪资预测模型(在app启动时算过一次缓存住)
-    # 也要跟着重新算一遍,否则 /chart 和 /ml 页面会显示基于旧数据的结果
+    # 数据更新后,重新计算聚类与预测模型,确保后续页面展示新数据
     global _clustering_result, _salary_model_result
     _clustering_result = job_clustering.run_clustering()
     _salary_model_result = salary_predict.train_and_evaluate()
@@ -228,7 +216,7 @@ def advice():
             return render_template('advice.html', error='请输入你的问题')
         api_key = getattr(config, 'DEEPSEEK_API_KEY', '')
         if not api_key:
-            return render_template('advice.html', error='请先在config.py里设置DEEPSEEK_API_KEY', question=question)
+            return render_template('advice.html', error='请先设置DEEPSEEK_API_KEY', question=question)
         try:
             answer, trace = run_agent(question, api_key, max_steps=5, verbose=False)
         except Exception as e:
@@ -238,8 +226,5 @@ def advice():
 
 
 if __name__ == '__main__':
-    # host='0.0.0.0': 监听所有网络接口,同一局域网内的其他设备可以通过你的局域网IP访问
-    # (默认只监听127.0.0.1,只有本机能访问)
-    # threaded=True: 允许同时处理多个请求,避免/collect这种耗时较长的实时采集
-    # 阻塞了其他人正常浏览页面
+    # 使用 threaded=True 支持并发请求,避免采集长时间运行时卡住其他统计页
     app.run(debug=True, host='0.0.0.0', threaded=True)
