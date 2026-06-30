@@ -26,6 +26,9 @@ project1/
 │   ├── agent_core.py            — 推理循环 (Reason + Act)
 │   └── agent_tools.py           — 工具注册 + 查询函数
 ├── templates/                # HTML 模板
+├── Dockerfile                # Docker 镜像构建
+├── docker-compose.yml        # Docker 一键部署
+├── .dockerignore             # Docker 忽略文件
 ├── test_*.py                 # 测试文件
 └── deprecated/               # 历史代码备份
 ```
