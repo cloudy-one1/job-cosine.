@@ -71,6 +71,27 @@ python -m data.fix_duplicate_address  # 地址清洗
 python test_agent_loop.py       # Agent 逻辑测试
 ```
 
+## Docker 部署
+
+```bash
+# 方式一: docker-compose (推荐)
+docker-compose up -d
+# 访问 http://localhost:5000
+
+# 方式二: 手动构建
+docker build -t job-analysis .
+docker run -d -p 5000:5000 \
+  -v $(pwd)/data.db:/app/data.db \
+  --env-file .env \
+  job-analysis
+
+# 虚拟机部署 (需要 Python 3.10+)
+git clone <repo-url> && cd project1
+pip install -r requirements.txt
+playwright install chromium     # 采集数据需要
+python app.py                   # 访问 http://<vm-ip>:5000
+```
+
 ## Web 页面
 
 | 路由 | 功能 | 页面 |

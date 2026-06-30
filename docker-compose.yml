@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  job-analysis:
+    build: .
+    container_name: job-analysis
+    ports:
+      - "5000:5000"
+    volumes:
+      # SQLite 数据持久化 (宿主机 data.db 映射到容器)
+      - ./data.db:/app/data.db
+      # CSV 数据文件 (fresh_job_data.csv 等)
+      - ./fresh_job_data.csv:/app/fresh_job_data.csv
+    env_file:
+      # 可选: 配置 DEEPSEEK_API_KEY
+      - .env
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped

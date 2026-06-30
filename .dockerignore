@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# 数据库 (通过 volume 挂载，不打包进镜像)
+*.db
+*.sqlite
+*.sqlite3
+
+# 测试
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 历史代码
+deprecated/
