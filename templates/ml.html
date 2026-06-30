@@ -4,9 +4,13 @@
 <p class="eyebrow">案卷 NO. 04 · 机器学习分析</p>
 <h2 style="margin-bottom:6px;">规则方法 vs 数据驱动方法</h2>
 <p style="color:var(--ink-soft); max-width:640px; margin-bottom:24px;">
+    {% if clustering %}
     左边是人工预设关键词规则的分类结果,右边是KMeans从数据里自动发现的聚类结构
     (k={{ clustering.k }},由轮廓系数自动选出)。两者类别数量、命名方式不同——
     规则方法可解释性更高,聚类方法不预设类别,完全由数据本身决定分组。
+    {% else %}
+    聚类模型尚未训练,请先执行数据采集。
+    {% endif %}
 </p>
 
 <div style="display:flex; gap:20px; flex-wrap:wrap;">
@@ -18,6 +22,7 @@
             {% endfor %}
         </table>
     </div>
+    {% if clustering %}
     <div class="card" data-no="KMeans聚类" style="flex:1; min-width:280px;">
         <table class="table table-striped">
             <tr><th>自动标签</th><th>数量</th></tr>
@@ -26,6 +31,7 @@
             {% endfor %}
         </table>
     </div>
+    {% endif %}
 </div>
 
 <h2 style="margin-top:36px; margin-bottom:6px;">地区分布(补充分析)</h2>
@@ -40,6 +46,7 @@
 
 <h2 style="margin-top:36px; margin-bottom:6px;">薪资预测模型</h2>
 <div class="card" data-no="线性回归">
+    {% if model_ready %}
     <p style="color:var(--ink-soft); margin-top:0;">
         用"城市 + 职位类别 + 学历 + 经验"四个特征做线性回归预测薪资。
         <span class="mono" style="color:var(--ink);">R² = {{ "%.3f"|format(model_r2) }}</span>
@@ -53,6 +60,9 @@
         加入学历+经验后R²没有明显提升,说明在当前数据规模下这两个特征的边际贡献有限。
         {% endif %}
     </p>
+    {% else %}
+    <p style="color:var(--ink-soft); margin-top:0;">模型尚未训练,请先执行数据采集后再使用薪资预测功能。</p>
+    {% endif %}
 
     <form method="post" action="/predict">
         <div style="display:flex; gap:10px; flex-wrap:wrap; max-width:680px;">

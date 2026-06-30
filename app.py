@@ -52,10 +52,29 @@ PER_PAGE = 12
 # 聚类计算(jieba分词+TFIDF+KMeans选k)耗时几秒,在app启动时算一次缓存住,
 # 不要让每次访问页面都重新跑一遍,否则用户体验很差。
 # 薪资预测模型同理,训练好的模型保留在内存里复用。
+
+def _has_data():
+    """检查数据库中是否有可用的招聘数据。"""
+    try:
+        db = sqlite3.connect(config.DB_PATH)
+        count = db.cursor().execute("SELECT COUNT(*) FROM data").fetchone()[0]
+        db.close()
+        return count > 0
+    except Exception:
+        return False
+
 print('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
-_clustering_result = job_clustering.run_clustering()
-_model_update(salary_predict.train_and_evaluate())   # 注入 modeling.cache,agent 自动共享
-print('预计算完成。')
+if not _has_data():
+    print('[警告] 数据库为空,跳过模型预计算。请先执行数据采集后再使用 /ml 和 Agent 功能。')
+    _clustering_result = None
+else:
+    try:
+        _clustering_result = job_clustering.run_clustering()
+        _model_update(salary_predict.train_and_evaluate())   # 注入 modeling.cache,agent 自动共享
+        print('预计算完成。')
+    except Exception as e:
+        print(f'[警告] 模型预计算失败: {e}。部分功能可能不可用。')
+        _clustering_result = None
 
 
 @app.route('/')
@@ -110,18 +129,24 @@ def chart():
     return render_template('h.html', xz=xz, xl=xl, jy=jy)
 
 
+def _safe_model_metrics(mc):
+    """当模型未训练时,返回安全的默认指标值,避免模板渲染崩溃。"""
+    if mc is None:
+        return {'r2': 0, 'old_r2': 0, 'mae': 0, 'baseline_mae': 0}
+    return {k: mc.get(k, 0) for k in ('r2', 'old_r2', 'mae', 'baseline_mae')}
+
+
 @app.route('/ml')
 def ml_page():
     mc = _model_get()
+    metrics = _safe_model_metrics(mc)
     return render_template(
         'ml.html',
         clustering=_clustering_result,
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
-        model_r2=mc['r2'],
-        model_old_r2=mc['old_r2'],
-        model_mae=mc['mae'],
-        baseline_mae=mc['baseline_mae'],
+        model_ready=mc is not None,
+        **metrics
     )
 
 
@@ -134,10 +159,13 @@ def predict():
 
     predict_error = None
     predict_result = None
-    if not city or not category:
+
+    mc = _model_get()
+    if mc is None:
+        predict_error = '薪资预测模型尚未训练,请先采集数据。'
+    elif not city or not category:
         predict_error = '请输入城市和职位类别'
     else:
-        mc = _model_get()
         pred, matched_edu, matched_exper, warns = salary_predict.predict_salary_safe(
             mc['model'], city, category, edu, exper,
             mc['valid_edu'], mc['valid_exper'],
@@ -149,15 +177,14 @@ def predict():
         }
 
     mc = _model_get()
+    metrics = _safe_model_metrics(mc)
     return render_template(
         'ml.html',
         clustering=_clustering_result,
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
-        model_r2=mc['r2'],
-        model_old_r2=mc['old_r2'],
-        model_mae=mc['mae'],
-        baseline_mae=mc['baseline_mae'],
+        model_ready=mc is not None,
+        **metrics,
         predict_error=predict_error,
         predict_result=predict_result,
     )
@@ -230,8 +257,11 @@ def collect():
     # 数据变了,聚类和薪资预测模型(在app启动时算过一次缓存住)
     # 也要跟着重新算一遍,否则 /chart 和 /ml 页面会显示基于旧数据的结果
     global _clustering_result
-    _clustering_result = job_clustering.run_clustering()
-    _model_update(salary_predict.train_and_evaluate())   # 同步更新建模缓存,agent 自动看到新模型
+    try:
+        _clustering_result = job_clustering.run_clustering()
+        _model_update(salary_predict.train_and_evaluate())  # 同步更新建模缓存
+    except Exception as e:
+        print(f'[警告] 采集后模型重算失败: {e}')
 
     return render_template(
         'collect.html', success_count=success, total_count=len(jobs),
