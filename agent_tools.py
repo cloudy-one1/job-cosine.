@@ -13,8 +13,27 @@ from xueli import xuelifun
 from jinyan import jinyanfun
 from salary_predict import train_and_evaluate, predict_salary_safe as _predict_salary_safe
 
-# 训练代价很低,但每次调用时重复训练浪费资源,所以在模块加载时训练一次并缓存结果
-_model_result = train_and_evaluate()
+# 不在模块加载时训练模型,而是由 app.py 在启动时训练完毕后注入。
+# 如果 app.py 尚未注入就尝试调用预测(例如直接运行本文件),按需懒加载。
+_model_result = None
+
+
+def _get_model_result():
+    """返回缓存的模型结果;若尚未注入,按需训练(直接运行本文件时的后备路径)。"""
+    global _model_result
+    if _model_result is None:
+        _model_result = train_and_evaluate()
+    return _model_result
+
+
+def set_model_result(result):
+    """供 app.py 调用,将训练好的模型注入到 agent 工具模块中。
+
+    在 app 启动时与 /collect 重新采集后调用,保证 agent 使用的模型
+    与 /ml 页面展示的指标始终一致。
+    """
+    global _model_result
+    _model_result = result
 
 
 def edu_overview() -> list:
@@ -29,9 +48,10 @@ def exper_overview() -> list:
 
 def predict_salary(city: str, category: str, edu: str = '不限', exper: str = '经验不限') -> dict:
     """基于城市 + 职位类别 + 学历 + 经验,使用缓存的线性回归模型预测月薪(千元)。"""
+    model_result = _get_model_result()
     pred, matched_edu, matched_exper, warns = _predict_salary_safe(
-        _model_result['model'], city, category, edu, exper,
-        _model_result['valid_edu'], _model_result['valid_exper'],
+        model_result['model'], city, category, edu, exper,
+        model_result['valid_edu'], model_result['valid_exper'],
     )
     result = {
         'city': city,
@@ -39,8 +59,8 @@ def predict_salary(city: str, category: str, edu: str = '不限', exper: str = '
         'edu': matched_edu,
         'exper': matched_exper,
         'predicted_salary_k': pred,
-        'model_r2': round(_model_result['r2'], 2),
-        'note': f"模型 R² = {_model_result['r2']:.2f}(加入学历与经验特征前为 {_model_result['old_r2']:.2f})。样本量较小,预测仅供参考。",
+        'model_r2': round(model_result['r2'], 2),
+        'note': f"模型 R² = {model_result['r2']:.2f}(加入学历与经验特征前为 {model_result['old_r2']:.2f})。样本量较小,预测仅供参考。",
     }
     if warns:
         result['input_warnings'] = warns

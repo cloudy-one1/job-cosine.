@@ -6,3 +6,4 @@ jieba>=0.42
 playwright>=1.40
 playwright-stealth>=1.0
 requests>=2.28
+pytest>=7.0

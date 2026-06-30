@@ -67,7 +67,7 @@ def choose_best_k(X, k_range=None):
 
     scores = {}
     for k in k_range:
-        km = KMeans(n_clusters=k, random_state=42, n_init=10)
+        km = KMeans(n_clusters=k, random_state=42, n_init='auto')
         labels = km.fit_predict(X)
         n_distinct = len(set(labels))
         if n_distinct < 2 or n_distinct > n_samples - 1:
@@ -86,7 +86,7 @@ def run_clustering(k=None):
     # 正常大小数据使用 min_df=2 过滤稀有词;当数据集很小时(例如非常新、非常窄范围的一次采集),
     # 放宽为 min_df=1,保证向量化器仍能输出有效结果。
     min_df = 2 if len(posts) >= 20 else 1
-    vectorizer = TfidfVectorizer(tokenizer=tokenize, token_pattern=None, min_df=min_df)
+    vectorizer = TfidfVectorizer(tokenizer=tokenize, min_df=min_df)
     X = vectorizer.fit_transform(posts)
     feature_names = vectorizer.get_feature_names_out()
 
@@ -95,7 +95,7 @@ def run_clustering(k=None):
     else:
         k_scores = None
 
-    km = KMeans(n_clusters=k, random_state=42, n_init=10)
+    km = KMeans(n_clusters=k, random_state=42, n_init='auto')
     labels = km.fit_predict(X)
 
     result = []
