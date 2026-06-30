@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p class="eyebrow">案卷 NO. 02 · 数据展示</p>
+<h2 style="margin-bottom:18px;">招聘数据档案</h2>
+
+<form method="get" action="/list" style="margin-bottom:20px; max-width:560px;">
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="text" class="form-control" name="kw" value="{{ kw or '' }}"
+               placeholder="岗位名称,如: python开发工程师" style="flex:1; min-width:200px;">
+        <input type="text" class="form-control" name="city" value="{{ city or '' }}"
+               placeholder="城市,如: 北京,上海" style="flex:1; min-width:160px;">
+        <button class="btn btn-info" type="submit">搜索</button>
+    </div>
+</form>
+
+<div class="card" data-no="共 {{ total }} 条记录">
+    {% if rows %}
+    <table class="table table-bordered table-striped">
+        <tr>
+            <th>职位</th><th>公司</th><th>城市</th><th>最低薪资(千元)</th><th>最高薪资(千元)</th><th>发布时间</th>
+        </tr>
+        {% for row in rows %}
+        <tr>
+            <td>{{ row[0] }}</td>
+            <td>{{ row[1] or '-' }}</td>
+            <td>{{ row[2] }}</td>
+            <td class="mono">{{ row[3] }}</td>
+            <td class="mono">{{ row[4] }}</td>
+            <td>{{ row[5] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p style="color:var(--ink-soft); text-align:center; padding:30px 0; margin:0;">
+        没有找到匹配的记录,换个关键词试试,比如"爬虫"或"杭州"。
+    </p>
+    {% endif %}
+</div>
+
+<div style="text-align:center; margin:24px 0;">
+    {% if page > 1 %}
+        <a href="/list?page={{ page-1 }}&kw={{ kw or '' }}&city={{ city or '' }}" class="btn btn-default">← 上一页</a>
+    {% endif %}
+    <span class="mono" style="margin:0 16px; color:var(--ink-soft); font-size:13px;">第 {{ page }} / {{ total_pages }} 页</span>
+    {% if page < total_pages %}
+        <a href="/list?page={{ page+1 }}&kw={{ kw or '' }}&city={{ city or '' }}" class="btn btn-default">下一页 →</a>
+    {% endif %}
+</div>
+
+{% endblock %}

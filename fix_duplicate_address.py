@@ -1,0 +1,44 @@
+"""
+修复 data.db 里已经存在的"城市名重复"地址数据,比如:
+  "广州-广州·天河区" -> "广州-天河区"
+  "广州-广州"        -> "广州"
+不需要重新爬取,纯粹是清洗已经导入的字符串数据。
+
+用法: python fix_duplicate_address.py
+"""
+import sqlite3
+import config
+
+
+def clean_address(addr):
+    if not addr or '-' not in addr:
+        return addr
+    city, rest = addr.split('-', 1)
+    if rest == city:
+        return city
+    if rest.startswith(city + '·'):
+        district = rest[len(city) + 1:]
+        return city + '-' + district
+    return city + '-' + rest.replace('·', '-')
+
+
+def main():
+    db = sqlite3.connect(config.DB_PATH)
+    cursor = db.cursor()
+    cursor.execute("SELECT id, address FROM data")
+    rows = cursor.fetchall()
+
+    changed = 0
+    for rid, addr in rows:
+        fixed = clean_address(addr)
+        if fixed != addr:
+            cursor.execute("UPDATE data SET address = ? WHERE id = ?", (fixed, rid))
+            changed += 1
+
+    db.commit()
+    db.close()
+    print(f'共检查 {len(rows)} 条,修复了 {changed} 条重复城市名的地址')
+
+
+if __name__ == '__main__':
+    main()

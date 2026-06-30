@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p class="eyebrow">案卷 NO. 03 · 图表分析</p>
+<h2 style="margin-bottom:20px;">招聘数据可视化</h2>
+
+<div class="card" data-no="薪资分布">
+    <div id="salary_chart" style="width:100%; height:380px;"></div>
+</div>
+
+<div style="display:flex; gap:20px; margin-top:20px; flex-wrap:wrap;">
+    <div class="card" data-no="学历占比" style="flex:1; min-width:280px;">
+        <div id="xueli_chart" style="width:100%; height:380px;"></div>
+    </div>
+    <div class="card" data-no="经验占比" style="flex:1; min-width:280px;">
+        <div id="jinyan_chart" style="width:100%; height:380px;"></div>
+    </div>
+</div>
+
+<script src="https://code.highcharts.com/highcharts.js"></script>
+<script>
+Highcharts.setOptions({
+    colors: ['#2E6E5E', '#A33B2E', '#9C7F3F', '#5E665A', '#7FA89A', '#1C2620'],
+    chart: { backgroundColor: 'transparent', style: { fontFamily: "'Noto Sans SC', sans-serif" } },
+    title: { style: { fontFamily: "'Noto Serif SC', serif", color: '#1C2620' } }
+});
+
+Highcharts.chart('salary_chart', {
+    chart: { type: 'column' },
+    title: { text: '薪资分布图' },
+    subtitle: { text: '数据来源: 51job实时采集' },
+    xAxis: {
+        categories: ['小于5k','5k~8k','8k~11k','11k~14k','14k~17k','17k~20k','20k~23k','23k以上']
+    },
+    yAxis: { title: { text: '职位数' } },
+    series: [{ name: '职位数', data: {{ xz|tojson }} }]
+});
+
+Highcharts.chart('xueli_chart', {
+    chart: { type: 'pie' },
+    title: { text: '学历占比情况' },
+    series: [{ name: '学历', type: 'pie', data: {{ xl|tojson }} }]
+});
+
+Highcharts.chart('jinyan_chart', {
+    chart: { type: 'pie' },
+    title: { text: '工作经验要求占比' },
+    series: [{ name: '经验', type: 'pie', data: {{ jy|tojson }} }]
+});
+</script>
+
+{% endblock %}

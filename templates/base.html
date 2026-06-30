@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>招聘信息实时数据分析系统</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+    <style>
+        :root{
+            --paper:#EDEFE8;
+            --card:#FBFAF6;
+            --ink:#1C2620;
+            --ink-soft:#5E665A;
+            --stamp:#A33B2E;
+            --brass:#9C7F3F;
+            --line:#D7D9CB;
+            --teal:#2E6E5E;
+            --teal-soft:#E4EEEA;
+        }
+        *{ box-sizing:border-box; }
+        html{ scroll-behavior:smooth; }
+        body{
+            margin:0; background:var(--paper); color:var(--ink);
+            font-family:'Noto Sans SC',sans-serif; font-size:15px; line-height:1.65;
+            padding-top:84px;
+        }
+        a{ color:var(--teal); text-decoration:none; }
+        a:hover{ color:var(--stamp); }
+        a:focus-visible, button:focus-visible, input:focus-visible{
+            outline:2px solid var(--stamp); outline-offset:2px;
+        }
+        h1,h2,h3,h4,h5{
+            font-family:'Noto Serif SC',serif; font-weight:900; color:var(--ink); margin:0 0 .4em;
+        }
+        .mono{ font-family:'JetBrains Mono',monospace; }
+        .eyebrow{
+            font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:.12em;
+            color:var(--ink-soft); text-transform:uppercase; margin:0 0 8px;
+        }
+
+        /* ---------- nav ---------- */
+        .navbar{
+            position:fixed; top:0; left:0; right:0; z-index:100;
+            background:var(--card); border-bottom:1px solid var(--line); padding:0;
+        }
+        .navbar .container{
+            max-width:1080px; margin:0 auto; padding:14px 20px;
+            display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+        }
+        .navbar-header{ display:flex; flex-direction:column; }
+        .navbar-brand{
+            font-family:'Noto Serif SC',serif; font-weight:900; font-size:19px;
+            color:var(--ink) !important; display:flex; align-items:center; gap:10px;
+        }
+        .navbar-brand::before{
+            content:"招"; display:inline-flex; align-items:center; justify-content:center;
+            width:30px; height:30px; border-radius:50%; flex-shrink:0;
+            border:2px solid var(--stamp); color:var(--stamp);
+            font-size:13px; font-weight:900; transform:rotate(-8deg);
+        }
+        .brand-tagline{
+            font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.12em;
+            color:var(--ink-soft); text-transform:uppercase; margin-top:3px; margin-left:40px;
+        }
+        ul.nav.navbar-nav{ list-style:none; display:flex; gap:24px; margin:0; padding:0; flex-wrap:wrap; }
+        ul.nav.navbar-nav li a{
+            color:var(--ink-soft); font-weight:500; font-size:14px;
+            padding:6px 0; border-bottom:2px solid transparent; display:inline-block;
+        }
+        ul.nav.navbar-nav li a:hover{ color:var(--ink); border-bottom-color:var(--stamp); }
+
+        /* ---------- layout ---------- */
+        .container-main{ max-width:1080px; margin:0 auto; padding:34px 20px 70px; }
+
+        /* ---------- card / ledger record ---------- */
+        .card, .well{
+            background:var(--card); border:1px solid var(--line); border-radius:3px;
+            padding:28px 30px; position:relative; margin-bottom:10px;
+        }
+        .card[data-no]::before, .well[data-no]::before{
+            content:attr(data-no); position:absolute; top:-11px; left:24px;
+            background:var(--paper); padding:0 10px;
+            font-family:'JetBrains Mono',monospace; font-size:11px;
+            letter-spacing:.08em; color:var(--brass);
+        }
+
+        /* ---------- stamp signature ---------- */
+        .stamp{
+            display:inline-flex; align-items:center; justify-content:center;
+            width:60px; height:60px; border-radius:50%; flex-shrink:0;
+            border:2px solid var(--stamp); color:var(--stamp);
+            font-family:'Noto Serif SC',serif; font-weight:900; font-size:12px;
+            line-height:1.2; transform:rotate(-9deg); letter-spacing:.03em; text-align:center;
+        }
+
+        /* ---------- buttons ---------- */
+        .btn{
+            display:inline-block; font-family:'Noto Sans SC',sans-serif; font-weight:600;
+            font-size:14px; padding:10px 20px; border-radius:2px; border:1px solid var(--ink);
+            background:transparent; color:var(--ink); cursor:pointer; transition:.15s ease;
+        }
+        .btn:hover{ background:var(--ink); color:var(--paper); }
+        .btn-info{ background:var(--teal); border-color:var(--teal); color:#fff; }
+        .btn-info:hover{ background:var(--ink); border-color:var(--ink); }
+        .btn-default{ background:var(--card); }
+
+        /* ---------- forms ---------- */
+        .form-control{
+            width:100%; padding:11px 14px; border:1px solid var(--line); border-radius:2px;
+            background:#fff; font-family:'Noto Sans SC',sans-serif; font-size:14px; color:var(--ink);
+        }
+        .form-control:focus{ outline:none; border-color:var(--teal); box-shadow:0 0 0 3px var(--teal-soft); }
+        .form-group{ margin-bottom:16px; }
+        .form-group label{ display:block; font-size:13px; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
+        .input-group{ display:flex; }
+        .input-group .form-control{ border-radius:2px 0 0 2px; }
+        .input-group-btn .btn{ border-radius:0 2px 2px 0; border-left:none; }
+
+        /* ---------- table ---------- */
+        .table{ width:100%; border-collapse:collapse; }
+        .table th{
+            text-align:left; font-family:'JetBrains Mono',monospace; font-size:11px;
+            letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft);
+            border-bottom:2px solid var(--ink); padding:10px 12px;
+        }
+        .table td{ padding:11px 12px; border-bottom:1px solid var(--line); font-size:14px; }
+        .table-bordered td, .table-bordered th{ border:1px solid var(--line); }
+        .table-bordered th{ border-bottom:2px solid var(--ink); }
+        .table-striped tr:nth-child(even) td{ background:var(--paper); }
+
+        /* ---------- alerts ---------- */
+        .alert{ padding:14px 18px; border-radius:2px; border-left:4px solid; font-size:14px; }
+        .alert-danger{ background:#FBEAE7; border-color:var(--stamp); color:#7A2A20; }
+        .alert-info{ background:var(--teal-soft); border-color:var(--teal); color:#1D4F42; }
+
+        /* ---------- motion ---------- */
+        @media (prefers-reduced-motion: no-preference){
+            .fade-up{ animation:fadeUp .6s ease both; }
+            @keyframes fadeUp{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:none;} }
+        }
+
+        /* ---------- responsive ---------- */
+        @media (max-width:720px){
+            body{ padding-top:108px; }
+            .card, .well{ padding:20px 18px; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="/">招聘信息实时数据分析系统</a>
+                <span class="brand-tagline">Recruitment Intelligence Ledger</span>
+            </div>
+            <ul class="nav navbar-nav">
+                <li><a href="/">首页</a></li>
+                <li><a href="/list">数据展示</a></li>
+                <li><a href="/chart">图表分析</a></li>
+                <li><a href="/ml">机器学习分析</a></li>
+                <li><a href="/advice">求职建议Agent</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container-main">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

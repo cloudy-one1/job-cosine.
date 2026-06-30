@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p class="eyebrow">案卷 NO. 00 · 实时采集结果</p>
+<h2 style="margin-bottom:20px;">采集结果</h2>
+
+{% if error %}
+<div class="alert alert-danger">{{ error }}</div>
+{% endif %}
+
+{% if success_count is defined %}
+<div class="alert alert-info">
+    采集完成: 关键词"{{ keyword }}"{% if city %} · 城市"{{ city }}"{% endif %},
+    共抓到 {{ total_count }} 条,成功写入数据库 <span class="mono">{{ success_count }}</span> 条
+    (已清空上一次的数据,聚类和预测模型也已重新训练)。
+    <br>
+    <a href="/list?kw={{ keyword }}&city={{ city }}">查看刚采集的数据 →</a> ·
+    <a href="/chart">查看更新后的图表 →</a> ·
+    <a href="/ml">查看更新后的机器学习分析 →</a>
+</div>
+{% endif %}
+
+<a href="/" class="btn btn-default" style="margin-top:20px;">← 返回首页继续查询/采集</a>
+
+{% endblock %}

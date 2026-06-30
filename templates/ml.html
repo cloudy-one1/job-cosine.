@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+
+<p class="eyebrow">案卷 NO. 04 · 机器学习分析</p>
+<h2 style="margin-bottom:6px;">规则方法 vs 数据驱动方法</h2>
+<p style="color:var(--ink-soft); max-width:640px; margin-bottom:24px;">
+    左边是人工预设关键词规则的分类结果,右边是KMeans从数据里自动发现的聚类结构
+    (k={{ clustering.k }},由轮廓系数自动选出)。两者类别数量、命名方式不同——
+    规则方法可解释性更高,聚类方法不预设类别,完全由数据本身决定分组。
+</p>
+
+<div style="display:flex; gap:20px; flex-wrap:wrap;">
+    <div class="card" data-no="规则方法" style="flex:1; min-width:280px;">
+        <table class="table table-striped">
+            <tr><th>类别</th><th>数量</th></tr>
+            {% for category, count in rule_based %}
+            <tr><td>{{ category }}</td><td class="mono">{{ count }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    <div class="card" data-no="KMeans聚类" style="flex:1; min-width:280px;">
+        <table class="table table-striped">
+            <tr><th>自动标签</th><th>数量</th></tr>
+            {% for c in clustering.clusters %}
+            <tr><td>{{ c.auto_label }}</td><td class="mono">{{ c.count }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+
+<h2 style="margin-top:36px; margin-bottom:6px;">地区分布(补充分析)</h2>
+<div class="card" data-no="地区">
+    <table class="table table-striped">
+        <tr><th>城市</th><th>职位数</th></tr>
+        {% for city, count in region_data %}
+        <tr><td>{{ city }}</td><td class="mono">{{ count }}</td></tr>
+        {% endfor %}
+    </table>
+</div>
+
+<h2 style="margin-top:36px; margin-bottom:6px;">薪资预测模型</h2>
+<div class="card" data-no="线性回归">
+    <p style="color:var(--ink-soft); margin-top:0;">
+        用"城市 + 职位类别 + 学历 + 经验"四个特征做线性回归预测薪资。
+        <span class="mono" style="color:var(--ink);">R² = {{ "%.3f"|format(model_r2) }}</span>
+        (仅用城市+类别两个特征时 R² = <span class="mono">{{ "%.3f"|format(model_old_r2) }}</span>) ·
+        模型 MAE <span class="mono">{{ "%.2f"|format(model_mae) }}</span> 千元 ·
+        基准 MAE(猜平均值) <span class="mono">{{ "%.2f"|format(baseline_mae) }}</span> 千元。
+        {% if model_r2 > model_old_r2 %}
+        加入学历+经验后R²有提升,说明这两个特征确实带来了额外的信息量,
+        但整体R²不高也说明数据量小、影响薪资的因素远不止这四个特征,预测仅供参考。
+        {% else %}
+        加入学历+经验后R²没有明显提升,说明在当前数据规模下这两个特征的边际贡献有限。
+        {% endif %}
+    </p>
+
+    <form method="post" action="/predict">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; max-width:680px;">
+            <input type="text" class="form-control" name="city" placeholder="城市,如: 北京" style="flex:1; min-width:120px;">
+            <input type="text" class="form-control" name="category" placeholder="职位类别,如: 爬虫工程师" style="flex:1; min-width:150px;">
+            <input type="text" class="form-control" name="edu" placeholder="学历(可选),如: 本科" style="flex:1; min-width:120px;">
+            <input type="text" class="form-control" name="exper" placeholder="经验(可选),如: 3-5年" style="flex:1; min-width:120px;">
+            <button type="submit" class="btn btn-info">预测薪资</button>
+        </div>
+    </form>
+
+    {% if predict_error %}
+    <div class="alert alert-danger" style="margin-top:16px;">{{ predict_error }}</div>
+    {% endif %}
+    {% if predict_result %}
+    <div class="alert alert-info" style="margin-top:16px;">
+        {{ predict_result.city }} · {{ predict_result.category }} ·
+        {{ predict_result.edu }} · {{ predict_result.exper }}:
+        预测薪资约 <span class="mono" style="font-size:17px;">{{ predict_result.pred }}</span> 千元/月
+        {% if predict_result.warnings %}
+        <div style="margin-top:10px; font-size:13px; color:var(--stamp);">
+            {% for w in predict_result.warnings %}
+            ⚠ {{ w }}<br>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
