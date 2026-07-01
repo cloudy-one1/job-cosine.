@@ -48,6 +48,8 @@ instance/
 .webassets-cache
 
 logs/
+cache/
+.debug
 
 .DS_Store
 Thumbs.db

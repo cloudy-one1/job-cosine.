@@ -475,25 +475,26 @@ def inject_globals():
 
 if __name__ == '__main__':
     # --- 启动配置 ---------------------------------------------------------------
-    # 关闭 debug 以避免 Flask 强制开启 reloader（reloader 会把 print 输出转到子进程，
-    # 导致终端看不到本地/局域网地址提示，且子进程退出后端口立即释放）。
-    # 需要 debug 自动热更新时显式开启:
-    #   $env:FLASK_DEBUG="1"  →  改 templates 后手动 Ctrl+C 重启即可(本项目改动不多)
-    #   FLASK_HOST=0.0.0.0    →  显式开启对外访问,局域网其他设备才能访问
-    debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    # debug 默认关闭，避免 Flask 强制开启 reloader（reloader fork 子进程后，
+    # 父进程的 print 输出丢失，且子进程启动失败时伪装为"正常退出"→ERR_CONNECTION_REFUSED）。
+    # 如需热更新: 在项目根目录 touch 一个 .debug 文件即可（不建议日常使用）。
+    # 局域网访问: $env:FLASK_HOST="0.0.0.0"
+    _debug_flag = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.debug')
+    debug = os.path.exists(_debug_flag)
+    if debug:
+        print("[WARN] 检测到 .debug 文件，已启用 debug 模式（含 reloader）", flush=True)
     host = os.environ.get('FLASK_HOST', '127.0.0.1')
 
     # threaded=True: 允许并发处理请求,避免/collect 阻塞其他页面浏览
-    # use_reloader=False: 关闭文件变化自动重启,防止中断正在进行的实时采集
     port = 5000
-    print(f"\n  → 本地访问: http://127.0.0.1:{port}")
+    print(f"\n  -> 本地访问: http://127.0.0.1:{port}", flush=True)
     try:
         import socket
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('10.254.254.254', 1))
         lan_ip = s.getsockname()[0]
         s.close()
-        print(f"  → 局域网访问: http://{lan_ip}:{port}    (同局域网设备可用)\n")
+        print(f"  -> 局域网访问: http://{lan_ip}:{port}    (同局域网设备可用)\n", flush=True)
     except Exception:
-        print()
-    app.run(debug=debug, host=host, port=port, threaded=True, use_reloader=False)
+        print(flush=True)
+    app.run(debug=debug, host=host, port=port, threaded=True, use_reloader=debug)
