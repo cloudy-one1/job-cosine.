@@ -34,6 +34,7 @@ data.db
 
 .vscode/
 .idea/
+.qoder/
 *.swp
 *.swo
 *~

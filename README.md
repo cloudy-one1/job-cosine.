@@ -38,6 +38,8 @@
 > - **数据库连接管理**：Flask `g` 对象复用连接 + `teardown_appcontext` 自动关闭，避免连接泄漏
 > - **模型持久化**：joblib 缓存聚类/回归模型到磁盘 (`cache/`)，服务器重启免重训
 > - **日志系统**：`logging` + `RotatingFileHandler` 替代 `print`，分级输出到 `logs/app.log`（5MB 旋转 × 3 备份）
+> - **启动性能优化**：sklearn / jieba / pandas 懒加载，Flask 秒启不再误判卡死；必要时预导入关键链路并打印进度提示
+> - **Debug 机制修复**：彻底放弃 `FLASK_DEBUG` 环境变量，改为根目录显式 **`.debug` 文件开关**，彻底根治环境变量残留导致 reloader 伪装退出、端口被抢占等诡异问题
 
 ## 项目结构
 
@@ -73,12 +75,12 @@ project1/
 │   ├── ml.html (规则vs聚类对比图+城市分布图)
 │   ├── advice.html, collect.html
 │
-├── tests/                    # 测试 (70 个用例)
-│   ├── test_app_routes.py       — 路由与安全回归测试 (14 个用例)
-│   ├── test_agent_loop.py       — Agent 逻辑集成测试 (假 LLM 存根)
-│   ├── test_python_job_scraper.py — 采集参数构建单元测试 (27 个用例)
-│   ├── test_salary_parser.py    — 薪资解析全覆盖测试 (20 个用例: 面议/万/千/年/日/·薪)
-│   ├── test_analysis_functions.py — classify/extract_city/tokenize/_fuzzy_match (25 个用例)
+├── tests/                    # 测试 (97 个用例, 全部通过)
+│   ├── test_app_routes.py       — 路由与安全回归测试 (10 个用例: CSRF / 页码校验 / 采集口令 / 限流)
+│   ├── test_agent_loop.py       — Agent 逻辑集成测试骨架 (预留, 待补齐真实用例)
+│   ├── test_python_job_scraper.py — 采集参数构建单元测试 (27 个用例: 关键词 / 城市 / 页码 / 时间戳)
+│   ├── test_salary_parser.py    — 薪资解析全覆盖测试 (20 个用例: 面议/万/千/年/日/·薪/奖金剥离)
+│   ├── test_analysis_functions.py — classify/extract_city/tokenize/_fuzzy_match (32 个用例)
 │   └── test_model_logic.py      — 聚类/预测模型核心逻辑测试 (8 个用例, mock DB)
 │
 ├── Dockerfile                # Docker 镜像构建
@@ -124,12 +126,17 @@ playwright install chromium
 # 复制 .env.example 为 .env，按需填入:
 #   DEEPSEEK_API_KEY=你的Key         (仅 Agent 问答页面需要)
 #   FLASK_SECRET=64字符随机字符串    (用于 session 和 CSRF token 签名持久化；不填每次启动随机)
-#   FLASK_DEBUG=0 / 1               (默认 0 关闭调试；1 才会显示 Werkzeug 调试器)
+#   COLLECT_TOKEN=采集口令          (设置后采集接口要求校验口令，防误操作清空数据；不填不启用)
 #   FLASK_HOST=127.0.0.1 / 0.0.0.0  (默认 127.0.0.1；0.0.0.0 才对外监听局域网)
+#
+#    ※ Debug 开关不再使用环境变量，改为文件开关：
+#    ※ 想要启用 debug + reloader（模板热更新）时，在项目根目录 touch 一个空的 .debug 文件即可
+#    ※ 日常开发建议保持关闭，否则 reloader 会 fork 子进程导致 print 丢失、端口残留、假退出
+#    ※ .debug 文件已被 .gitignore 忽略
 
 # 3. 启动 Web 服务
 python app.py
-# 访问 http://127.0.0.1:5000
+# 终端会自动打印 本地访问(http://127.0.0.1:5000) + 同局域网访问地址
 
 # 4. 命令行独立运行各模块验证
 python -c "from analysis.xinzi import salary_distribution; print(salary_distribution())"
@@ -137,7 +144,7 @@ python -c "from analysis.jobtitle import classify_batch; print(classify_batch())
 python -c "from modeling.job_clustering import run_clustering; print(run_clustering())"
 python -c "from modeling.salary_predict import train_and_evaluate; print(train_and_evaluate())"
 python -c "from data.fix_duplicate_address import fix_addresses; print(fix_addresses())"
-python -m pytest tests/ -v   # 运行全部测试 (37 个用例)
+python -m pytest tests/ -v   # 运行全部测试 (97 个用例, 全部通过)
 ```
 
 ### 方式二：Docker 部署（推荐用于服务器/长期运行）
@@ -150,6 +157,8 @@ python -c "from data.python_job_scraper import scrape_jobs; scrape_jobs()"
 
 # 2. 启动 Docker 容器 (纯 Web 服务，不含爬虫)
 # 方式一: docker-compose (推荐，最简单)
+# 注：docker-compose.yml 已挂载 templates/、app.py、config.py 到容器 → 开发期改源码不用重建镜像
+# 仅 data.db 持久化数据，模板改动容器立即生效
 docker-compose up -d
 # 访问 http://localhost:5000
 
@@ -157,6 +166,9 @@ docker-compose up -d
 docker build -t job-analysis .
 docker run -d -p 5000:5000 \
   -v $(pwd)/data.db:/app/data.db \
+  -v $(pwd)/templates:/app/templates:ro \
+  -v $(pwd)/app.py:/app/app.py:ro \
+  -v $(pwd)/config.py:/app/config.py:ro \
   --env-file .env \
   job-analysis
 
@@ -215,11 +227,19 @@ python app.py                      # 访问 http://<服务器IP>:5000
 
 ## 更新日志（Changelog）
 
-- **2026-07-01 · fix: 饼图修复 + debug默认开启 + pkg_resources预导入**
-  - 学历/经验图从环形→完整饼图（`radius: ['0%','70%']`）
-  - `FLASK_DEBUG` 默认开启，模板改动自动热更新，无需手动重启
-  - 恢复启动时终端打印本地+局域网访问地址
-  - 预导入 `pkg_resources`，修复 VSCode 首次运行 jieba 导入卡死
+- **2026-07-01 · docs/config 同步：README 对齐项目现状 + docker-compose 热更新挂载 + .gitignore**
+  - 测试用例总数从 README 声称的 70/37 → 实测 **97 passed**（test_analysis_functions 25→32，test_app_routes 14→10，补齐 test_salary_parser 的奖金剥离说明）；test_agent_loop 标注为「预留骨架，待补齐」
+  - `.gitignore` 新增 `.qoder/`（Trae 本地知识库缓存）
+  - `docker-compose.yml` 新增 templates / app.py / config.py 本地挂载：**开发期改模板和代码不再需要重建镜像**
+  - 安全加固列表中新增「COLLECT_TOKEN 采集口令保护」到快速开始的环境变量说明中
+  - README 安全/工程质量描述、快速开始 debug 说明、Docker 部署说明与 `app.py` / `.gitignore` / `docker-compose.yml` 代码完全对齐
+
+- **2026-07-01 · fix: 饼图修复 + 启动性能与 Debug 机制全面整改（7 轮迭代）**
+  - 学历/经验占比图从「环形图」回归真实配置：**实心饼状图** `radius: ['0%', '70%']`（注意：修改模板后若页面不生效，先检查 5000 端口是否残留 IDE 启动的旧 Flask 进程或 Docker `job-analysis` 容器）
+  - **Debug 开关彻底改为 `.debug` 文件控制**：不再读取 `FLASK_DEBUG` 环境变量，根治环境变量残留导致的 reloader 伪装退出、端口抢占、print 丢失、假启动成功实际 502 等诡异问题
+  - `use_reloader=debug`：只有显式放了 `.debug` 文件才开启 Werkzeug 子进程重载，日常关闭避免 fork
+  - **启动性能优化多轮**：sklearn / jieba / pandas 先改为「懒加载」实现 Flask 秒启；后根据 VSCode 冷启动卡死的真实反馈，迭代为「选择性预导入关键链路 + 多段进度打印」，两者兼得
+  - 终端启动时自动打印本地访问地址 `http://127.0.0.1:5000` 与同局域网访问地址（UDP 探测取 LAN IP）
 
 - **2026-07-01 · feat: 测试覆盖 + ECharts 可视化**
   - 新增 3 个测试文件：`test_salary_parser.py`(20), `test_analysis_functions.py`(25), `test_model_logic.py`(8)

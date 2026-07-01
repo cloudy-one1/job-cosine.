@@ -7,6 +7,10 @@ services:
     volumes:
       # SQLite 数据持久化（宿主机采集 data.db → 容器读）
       - ./data.db:/app/data.db
+      # 模板/源码热更新（开发时不需重建镜像）
+      - ./templates:/app/templates
+      - ./app.py:/app/app.py
+      - ./config.py:/app/config.py
     env_file:
       # 可选：配置 DEEPSEEK_API_KEY
       - .env
