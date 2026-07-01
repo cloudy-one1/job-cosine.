@@ -26,11 +26,15 @@ import warnings
 # 消掉 jieba → pkg_resources 的弃用警告
 warnings.filterwarnings('ignore', message='pkg_resources is deprecated', category=UserWarning)
 
-# 预导入 pkg_resources：避免 jieba 在 VSCode 首次运行时因
-# pkg_resources 延迟初始化导致线程死锁（二次运行正常）。
+# 预导入 pkg_resources + jieba：
+# jieba → _compat → pkg_resources 在 VSCode 首次运行时 pkg_resources
+# 的全量包扫描可能卡死（二次运行因 .pyc 缓存正常）。
+# 在顶部一次性完成整个导入链，避免后续 import jieba 时死锁。
 try:
     import pkg_resources as _pr
     del _pr
+    import jieba as _jb
+    del _jb
 except Exception:
     pass
 
