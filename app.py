@@ -476,4 +476,4 @@ if __name__ == '__main__':
         print(f"  → 局域网访问: http://{lan_ip}:{port}    (同局域网设备可用)\n")
     except Exception:
         print()
-    app.run(debug=debug, host=host, threaded=True, use_reloader=False)
+    app.run(debug=debug, host=host, port=port, threaded=True, use_reloader=False)
