@@ -31,7 +31,6 @@ wheels/
 data.db
 
 *.csv
-!fresh_job_data.csv
 
 .vscode/
 .idea/
