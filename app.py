@@ -26,24 +26,6 @@ import warnings
 # 消掉 jieba → pkg_resources 的弃用警告
 warnings.filterwarnings('ignore', message='pkg_resources is deprecated', category=UserWarning)
 
-# 预导入重依赖（pkg_resources / jieba / sklearn）：
-# 1) jieba._compat 依赖 pkg_resources，首次运行 pkg_resources 需扫描
-#    全量已安装包（~168行类定义），耗时较长
-# 2) sklearn 首次 import 时需要为 numpy/sklearn 的 .py 编译生成 .pyc 缓存
-#    （_bootstrap_external._compile_bytecode），单次可能耗时 3-10 秒
-# 这两步在 VSCode 终端中容易让用户误判为卡死。
-# 此处显式打印进度，让用户知道服务器正在初始化而非死锁。
-print("[1/3] 正在加载 pkg_resources...", flush=True)
-import pkg_resources as _pr
-del _pr
-print("[2/3] 正在加载 jieba (首次需要分词词典初始化)...", flush=True)
-import jieba as _jb
-del _jb
-print("[3/3] 正在加载 sklearn (首次需编译大量 .pyc, 请耐心等待)...", flush=True)
-import sklearn as _sk
-del _sk
-print("依赖加载完成。\n", flush=True)
-
 import sqlite3
 import re as _re
 import logging
@@ -81,20 +63,8 @@ _logger.addHandler(_console_handler)
 from data.python_job_scraper import scrape_jobs
 from data.salary_parser import parse_salary
 
-# --- 描述性统计层 ---
-import analysis.xinzi as xinzi
-import analysis.xueli as xueli
-import analysis.jinyan as jinyan
-import analysis.region as region
-import analysis.jobtitle as jobtitle
-
-# --- 建模层 ---
-import modeling.job_clustering as job_clustering
-import modeling.salary_predict as salary_predict
+# --- 模型缓存（仅此模块本身轻量，内部含延迟导入） ---
 from modeling.cache import update as _model_update, get as _model_get
-
-# --- Agent 层 ---
-from agent.agent_core import run_agent
 
 app = Flask(__name__)
 
@@ -154,6 +124,9 @@ def _raw_connect():
 def _load_or_train_models():
     """尝试加载磁盘缓存的模型;失败或不存在则重训并持久化。"""
     import joblib as _joblib
+    import modeling.job_clustering as job_clustering
+    import modeling.salary_predict as salary_predict
+
     _cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
     os.makedirs(_cache_dir, exist_ok=True)
     _cluster_path = os.path.join(_cache_dir, 'clustering_result.joblib')
@@ -214,10 +187,20 @@ def _has_data():
         return False
 
 
-_logger.info('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
-_clustering_result = _load_or_train_models()
-if _clustering_result is not None:
-    _logger.info('预计算完成。')
+# 聚类结果懒加载：不在启动时触发 sklearn/pandas 的首次 .pyc 编译，
+# 等首个访问 /ml 或 /predict 的请求到来时才计算（避免误判启动卡死）
+_clustering_cache = None
+
+def _get_clustering():
+    """获取聚类结果（首次调用时训练+缓存，后续直接返回）。"""
+    global _clustering_cache
+    if _clustering_cache is not None:
+        return _clustering_cache
+    _logger.info('正在预计算职位聚类和薪资预测模型(只在第一次访问时跑一次)...')
+    _clustering_cache = _load_or_train_models()
+    if _clustering_cache is not None:
+        _logger.info('预计算完成。')
+    return _clustering_cache
 
 
 @app.route('/')
@@ -270,6 +253,10 @@ def list_data():
 
 @app.route('/chart')
 def chart():
+    import analysis.xinzi as xinzi
+    import analysis.xueli as xueli
+    import analysis.jinyan as jinyan
+    import analysis.region as region
     xz = xinzi.xinzi()
     xl = xueli.xuelifun()
     jy = jinyan.jinyanfun()
@@ -293,11 +280,13 @@ def _safe_model_metrics(mc):
 
 @app.route('/ml')
 def ml_page():
+    import analysis.jobtitle as jobtitle
+    import analysis.region as region
     mc = _model_get()
     metrics = _safe_model_metrics(mc)
     return render_template(
         'ml.html',
-        clustering=_clustering_result,
+        clustering=_get_clustering(),
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
         model_ready=mc is not None,
@@ -307,6 +296,10 @@ def ml_page():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    import modeling.salary_predict as salary_predict
+    import analysis.jobtitle as jobtitle
+    import analysis.region as region
+
     city = request.form.get('city', '').strip()
     category = request.form.get('category', '').strip()
     edu = request.form.get('edu', '').strip() or '不限'
@@ -336,7 +329,7 @@ def predict():
     metrics = _safe_model_metrics(mc)
     return render_template(
         'ml.html',
-        clustering=_clustering_result,
+        clustering=_get_clustering(),
         rule_based=jobtitle.jobtitlefun(),
         region_data=region.regionfun(),
         model_ready=mc is not None,
@@ -432,14 +425,16 @@ def collect():
 
     # 数据变了,聚类和薪资预测模型(在app启动时算过一次缓存住)
     # 也要跟着重新算一遍,否则 /chart 和 /ml 页面会显示基于旧数据的结果
-    global _clustering_result
+    global _clustering_cache
     import joblib as _joblib
+    import modeling.job_clustering as job_clustering
+    import modeling.salary_predict as salary_predict
     _cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
     _cluster_path = os.path.join(_cache_dir, 'clustering_result.joblib')
     _salary_path = os.path.join(_cache_dir, 'salary_model.joblib')
     try:
-        _clustering_result = job_clustering.run_clustering()
-        _joblib.dump(_clustering_result, _cluster_path)
+        _clustering_cache = job_clustering.run_clustering()
+        _joblib.dump(_clustering_cache, _cluster_path)
         salary_result = salary_predict.train_and_evaluate()
         _model_update(salary_result)
         _joblib.dump(salary_result, _salary_path)
@@ -463,6 +458,7 @@ def advice():
         if not api_key:
             return render_template('advice.html', error='请先在config.py里设置DEEPSEEK_API_KEY', question=question)
         try:
+            from agent.agent_core import run_agent
             answer, trace = run_agent(question, api_key, max_steps=5, verbose=False)
         except Exception as e:
             return render_template('advice.html', error='Agent调用失败,请稍后重试', question=question)
