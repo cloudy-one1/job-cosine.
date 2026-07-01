@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import json
 import re
 import time
+import inspect
 import requests
 
 from agent.agent_tools import TOOLS
@@ -128,7 +129,12 @@ def run_agent(user_question, api_key, max_steps=5, verbose=True, llm_call=None):
             if tool_name in TOOLS:
                 func = TOOLS[tool_name]['func']
                 try:
-                    result = func(**tool_input)
+                    # 白名单过滤: 只传入函数签名中实际接受的参数。
+                    # LLM 可能产生幻觉参数或多余字段,直接 ** 解包会 TypeError。
+                    sig = inspect.signature(func)
+                    valid_params = set(sig.parameters.keys())
+                    filtered_input = {k: v for k, v in tool_input.items() if k in valid_params}
+                    result = func(**filtered_input)
                 except Exception as e:
                     result = f'Tool call failed: {e}'
             else:

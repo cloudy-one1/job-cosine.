@@ -22,6 +22,12 @@
             <label>实时采集页数(仅"立即实时采集"生效,1~5)</label>
             <input type="number" class="form-control" name="pages" value="2" min="1" max="5" style="max-width:120px;">
         </div>
+        {% if collect_token_required %}
+        <div class="form-group">
+            <label>采集口令(管理员已锁定此功能)</label>
+            <input type="password" class="form-control" name="token" placeholder="请输入采集口令" style="max-width:200px;">
+        </div>
+        {% endif %}
         <div style="display:flex; gap:10px;">
             <button type="submit" formaction="/list" formmethod="get"
                     class="btn btn-default" style="flex:1;">查询已有数据</button>

@@ -40,11 +40,11 @@
 
 <div style="text-align:center; margin:24px 0;">
     {% if page > 1 %}
-        <a href="/list?page={{ page-1 }}&kw={{ (kw or '')|urlencode }}&city={{ (city or '')|urlencode }}" class="btn btn-default">← 上一页</a>
+        <a href="{{ url_for('list_data', page=page-1, kw=kw or '', city=city or '') }}" class="btn btn-default">← 上一页</a>
     {% endif %}
     <span class="mono" style="margin:0 16px; color:var(--ink-soft); font-size:13px;">第 {{ page }} / {{ total_pages }} 页</span>
     {% if page < total_pages %}
-        <a href="/list?page={{ page+1 }}&kw={{ (kw or '')|urlencode }}&city={{ (city or '')|urlencode }}" class="btn btn-default">下一页 →</a>
+        <a href="{{ url_for('list_data', page=page+1, kw=kw or '', city=city or '') }}" class="btn btn-default">下一页 →</a>
     {% endif %}
 </div>
 

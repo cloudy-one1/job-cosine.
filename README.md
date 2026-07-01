@@ -28,6 +28,11 @@
 > - **secret_key 安全注入**：从 `FLASK_SECRET` 环境变量读取，未设时使用 `os.urandom(32)` 随机值
 > - **debug/host 默认关闭**：`FLASK_DEBUG` 默认 0，`FLASK_HOST` 默认 `127.0.0.1`，需显式开启才对外暴露
 > - 新增 `tests/test_app_routes.py`（10 个用例）覆盖安全修复的回归测试
+> - **采集口令保护**：`.env` 配置 `COLLECT_TOKEN` 后，采集需输入口令，防误操作清空数据
+> - **速率限制**（Flask-Limiter）：全局 50/小时 + 采集接口 5/小时，防滥用
+> - **SQLite WAL 模式**：启动时自动启用，并发读不再被写操作锁库
+> - **Agent 参数白名单**：`inspect.signature` 过滤 LLM 幻觉参数，防 TypeError
+> - **分页链接 `url_for()`**：自动 URL 编码，杜绝手动拼接的安全隐患
 
 ## 项目结构
 

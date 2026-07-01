@@ -25,6 +25,8 @@ import re as _re
 
 from flask import Flask, render_template, request, redirect
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 import config
 
@@ -57,6 +59,22 @@ app.secret_key = os.environ.get('FLASK_SECRET') or os.urandom(32)
 # 启用 Flask-WTF CSRF 保护。所有 POST 表单必须带 {{ csrf_token() }} 隐藏字段,
 # 否则返回 400 Bad Request (防止跨站请求伪造)。
 csrf = CSRFProtect(app)
+
+# Flask-Limiter 速率限制: 全局限流 + 对危险路由(/collect)单独收紧
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+)
+
+# SQLite WAL 模式: 设一次即持久化到数据库文件,后续所有连接自动受益(并发读不阻塞写)
+try:
+    if os.path.exists(config.DB_PATH):
+        _wal_conn = sqlite3.connect(config.DB_PATH)
+        _wal_conn.execute("PRAGMA journal_mode=WAL")
+        _wal_conn.close()
+except Exception:
+    pass
 
 PER_PAGE = 12
 
@@ -215,6 +233,7 @@ def predict():
 
 
 @app.route('/collect', methods=['GET', 'POST'])
+@limiter.limit("5 per hour")  # 采集接口单独限流,防止滥用
 def collect():
     """
     用户指定关键词+城市,触发一次真实的51job实时采集(Playwright+stealth),
@@ -228,6 +247,19 @@ def collect():
     """
     if request.method != 'POST':
         return redirect('/')
+
+    # --- 采集口令校验 --------------------------------------------------------
+    # 若 .env 中设置了 COLLECT_TOKEN,则要求表单中提交匹配的 token 字段,
+    # 否则拒绝采集 —— 防止演示/教学场景下被人误操作清空数据。
+    if config.COLLECT_TOKEN:
+        form_token = request.form.get('token', '')
+        if form_token != config.COLLECT_TOKEN:
+            return render_template(
+                'collect.html',
+                error='采集口令不正确,请联系管理员获取',
+                keyword=request.form.get('kw', '').strip(),
+                city=request.form.get('city', '').strip(),
+            ), 403
 
     keyword = request.form.get('kw', '').strip()
     city_raw = request.form.get('city', '').strip()
@@ -315,6 +347,13 @@ def advice():
             return render_template('advice.html', error='Agent调用失败,请稍后重试', question=question)
         return render_template('advice.html', question=question, answer=answer, trace=trace)
     return render_template('advice.html')
+
+
+# --- 模板全局变量注入 ------------------------------------------------------------
+@app.context_processor
+def inject_globals():
+    """向所有模板注入全局变量,避免每个路由手动传参。"""
+    return {'collect_token_required': bool(config.COLLECT_TOKEN)}
 
 
 if __name__ == '__main__':

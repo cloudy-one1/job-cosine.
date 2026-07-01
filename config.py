@@ -41,3 +41,7 @@ DB_URI = 'sqlite:///' + DB_PATH
 
 # DeepSeek API Key,供 agent 使用;若未配置则为空字符串
 DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
+
+# 采集口令: 若配置了非空值,则 /collect 路由要求 POST 表单中带 token 字段匹配,
+# 用于防止演示/教学场景下被人误点清空数据。不配置则不限制采集。
+COLLECT_TOKEN = os.environ.get('COLLECT_TOKEN', '')
