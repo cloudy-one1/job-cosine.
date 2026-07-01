@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import json
 import re
+import time
 import requests
 
 from agent.agent_tools import TOOLS
@@ -51,15 +52,26 @@ def build_system_prompt():
     return SYSTEM_PROMPT_TEMPLATE.format(tool_list='\n'.join(tool_lines))
 
 
-def call_deepseek(messages, api_key, model='deepseek-chat'):
-    resp = requests.post(
-        DEEPSEEK_API_URL,
-        headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
-        json={'model': model, 'messages': messages, 'temperature': 0.3},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()['choices'][0]['message']['content']
+def call_deepseek(messages, api_key, model='deepseek-chat', max_retries=3):
+    """调用 DeepSeek API,带指数退避重试,应对网络抖动。"""
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(
+                DEEPSEEK_API_URL,
+                headers={'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'},
+                json={'model': model, 'messages': messages, 'temperature': 0.3},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()['choices'][0]['message']['content']
+        except requests.exceptions.RequestException as e:
+            last_error = e
+            if attempt < max_retries:
+                wait = 2 ** attempt  # 2s, 4s, 8s
+                print(f'[Agent] API 调用失败(第{attempt}次),{wait}s后重试: {e}')
+                time.sleep(wait)
+    raise last_error
 
 
 def parse_llm_output(text):

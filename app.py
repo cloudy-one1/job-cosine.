@@ -60,7 +60,8 @@ def _has_data():
         count = db.cursor().execute("SELECT COUNT(*) FROM data").fetchone()[0]
         db.close()
         return count > 0
-    except Exception:
+    except Exception as e:
+        print(f'[警告] 数据库读取失败: {e}')
         return False
 
 print('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
@@ -84,7 +85,11 @@ def index():
 
 @app.route('/list')
 def list_data():
-    page = int(request.args.get('page', 1))
+    try:
+        page = int(request.args.get('page', 1))
+    except (ValueError, TypeError):
+        page = 1
+    page = max(1, page)  # 避免页码为0或负数
     kw = request.args.get('kw', '').strip()
     city_raw = request.args.get('city', '').strip()
     cities = [c.strip() for c in _re.split(r'[,，\s]+', city_raw) if c.strip()]
@@ -176,6 +181,7 @@ def predict():
         pred, matched_edu, matched_exper, warns = salary_predict.predict_salary_safe(
             mc['model'], city, category, edu, exper,
             mc['valid_edu'], mc['valid_exper'],
+            mc.get('valid_city'), mc.get('valid_category'),
         )
         predict_result = {
             'city': city, 'category': category,
@@ -230,7 +236,8 @@ def collect():
     try:
         jobs = scrape_jobs(keyword, cities, pages_per_city=pages)
     except Exception as e:
-        return render_template('collect.html', error=f'采集出错: {e}',
+        # 不把原始异常信息直接抛给前端,避免泄露内部路径/堆栈信息
+        return render_template('collect.html', error='采集过程发生错误,请稍后重试',
                                 keyword=keyword, city=city_raw)
 
     if not jobs:
@@ -240,11 +247,10 @@ def collect():
             keyword=keyword, city=city_raw,
         )
 
+    # 先写入临时数据,确认成功后再替换旧数据(原子性保护:
+    # 如果写入过程中途失败,旧数据依然保留,不会出现空库)
     db = sqlite3.connect(config.DB_PATH)
     cursor = db.cursor()
-    # 每次实时采集都是一次新的分析案例,清空上一次的结果,
-    # 跟教材4.4.6节 data_clr() 的设计思路一致
-    cursor.execute("DELETE FROM data")
     success = 0
     for j in jobs:
         smin, smax = parse_salary(j['salary_raw'])
@@ -258,6 +264,13 @@ def collect():
             success += 1
         except Exception:
             pass
+    # 只有成功写入至少一条数据后,才清空旧数据并提交
+    if success > 0:
+        cursor.execute(
+            "DELETE FROM data WHERE rowid NOT IN "
+            "(SELECT rowid FROM data ORDER BY rowid DESC LIMIT ?)",
+            (success,)
+        )
     db.commit()
     db.close()
 
@@ -288,7 +301,7 @@ def advice():
         try:
             answer, trace = run_agent(question, api_key, max_steps=5, verbose=False)
         except Exception as e:
-            return render_template('advice.html', error=f'Agent调用出错: {e}', question=question)
+            return render_template('advice.html', error='Agent调用失败,请稍后重试', question=question)
         return render_template('advice.html', question=question, answer=answer, trace=trace)
     return render_template('advice.html')
 

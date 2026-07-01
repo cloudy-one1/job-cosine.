@@ -94,6 +94,8 @@ def train_and_evaluate(random_state=42):
     X, _ = build_dataset(include_edu_exper=True)
     new_result['valid_edu'] = sorted(set(X[:, 2]))
     new_result['valid_exper'] = sorted(set(X[:, 3]))
+    new_result['valid_city'] = sorted(set(X[:, 0]))
+    new_result['valid_category'] = sorted(set(X[:, 1]))
     return new_result
 
 
@@ -114,10 +116,11 @@ def _fuzzy_match(value, valid_values, fallback):
     return fallback, True
 
 
-def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_exper):
-    """predict_salary 的包装函数:当调用方传入训练数据中没有的学历或经验值时发出警告
+def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_exper,
+                        valid_city=None, valid_category=None):
+    """predict_salary 的包装函数:当调用方传入训练数据中未见过的类别时发出警告
     (而不是默默给出错误预测)。OneHotEncoder(handle_unknown='ignore') 会丢弃未见过的列,
-    这会悄悄改变特征向量,导致用户输入数字期望匹配 "3-5年" 风格类别时产生无意义预测。
+    这会悄悄改变特征向量,导致无意义预测。
     """
     warnings = []
     matched_edu, edu_sub = _fuzzy_match(edu, valid_edu, '不限')
@@ -126,6 +129,10 @@ def predict_salary_safe(model, city, category, edu, exper, valid_edu, valid_expe
         warnings.append(f'学历输入"{edu}"不在训练数据标准取值中,已模糊匹配/替换为"{matched_edu}"')
     if exper_sub:
         warnings.append(f'经验输入"{exper}"不在训练数据标准取值中,已模糊匹配/替换为"{matched_exper}"')
+    if valid_city and city and city not in valid_city:
+        warnings.append(f'城市"{city}"不在训练数据中,预测结果可能不准确')
+    if valid_category and category and category not in valid_category:
+        warnings.append(f'职位类别"{category}"不在训练数据中,预测结果可能不准确')
 
     pred = predict_salary(model, city, category, matched_edu, matched_exper)
     return pred, matched_edu, matched_exper, warnings

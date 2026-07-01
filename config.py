@@ -21,7 +21,11 @@ def _load_env_file():
                 continue
             key, value = line.split('=', 1)
             key = key.strip()
-            value = value.strip().strip('"\'')
+            # 只去除首尾各一对匹配的引号(双引号或单引号),避免误删字面内容
+            value = value.strip()
+            if len(value) >= 2:
+                if (value[0] == '"' and value[-1] == '"') or (value[0] == "'" and value[-1] == "'"):
+                    value = value[1:-1]
             if key and value:
                 os.environ.setdefault(key, value)
 
