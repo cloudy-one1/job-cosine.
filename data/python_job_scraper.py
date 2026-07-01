@@ -178,7 +178,9 @@ def scrape_jobs(keyword, cities, pages_per_city=3, progress_callback=None):
         for city, code in valid_cities:
             for pg in range(1, pages_per_city + 1):
                 params = build_api_params(keyword, code, pg)
-                time.sleep(random.uniform(0.1, 0.3))
+                # 前3页快速翻(模拟正常浏览),后面逐渐放慢避免触发风控
+                delay = random.uniform(0.1, 0.3) if pg <= 3 else random.uniform(0.3, 0.6)
+                time.sleep(delay)
                 data = page.evaluate(JS_FETCH_API, params)
 
                 if isinstance(data, dict) and 'error' in data:
