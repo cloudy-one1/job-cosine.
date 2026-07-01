@@ -130,10 +130,17 @@ def chart():
 
 
 def _safe_model_metrics(mc):
-    """当模型未训练时,返回安全的默认指标值,避免模板渲染崩溃。"""
+    """当模型未训练时,返回安全的默认指标值,避免模板渲染崩溃。
+    模板里使用 model_r2 / model_old_r2 / model_mae / baseline_mae 这4个键。"""
+    defaults = {'model_r2': 0, 'model_old_r2': 0, 'model_mae': 0, 'baseline_mae': 0}
     if mc is None:
-        return {'r2': 0, 'old_r2': 0, 'mae': 0, 'baseline_mae': 0}
-    return {k: mc.get(k, 0) for k in ('r2', 'old_r2', 'mae', 'baseline_mae')}
+        return defaults
+    return {
+        'model_r2': mc.get('r2', 0),
+        'model_old_r2': mc.get('old_r2', 0),
+        'model_mae': mc.get('mae', 0),
+        'baseline_mae': mc.get('baseline_mae', 0),
+    }
 
 
 @app.route('/ml')
