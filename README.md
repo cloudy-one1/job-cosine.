@@ -24,6 +24,10 @@
 > - URL 参数自动转义，防特殊字符截断
 > - Agent API 调用带指数退避重试，网络抖动不直接失败
 > - 前端异常信息脱敏，不泄露内部路径和堆栈
+> - **全站点 CSRF 防护**（Flask-WTF）：3 处 POST 表单强制校验 token，防跨站伪造提交
+> - **secret_key 安全注入**：从 `FLASK_SECRET` 环境变量读取，未设时使用 `os.urandom(32)` 随机值
+> - **debug/host 默认关闭**：`FLASK_DEBUG` 默认 0，`FLASK_HOST` 默认 `127.0.0.1`，需显式开启才对外暴露
+> - 新增 `tests/test_app_routes.py`（10 个用例）覆盖安全修复的回归测试
 
 ## 项目结构
 
@@ -59,8 +63,9 @@ project1/
 │   └── collect.html
 │
 ├── tests/                    # 测试
+│   ├── test_app_routes.py       — 路由与安全回归测试 (10 个用例：CSRF/secret_key/debug+host/页码容错)
 │   ├── test_agent_loop.py       — Agent 逻辑集成测试 (假 LLM 存根)
-│   └── test_python_job_scraper.py — 采集参数构建单元测试 (22 个用例)
+│   └── test_python_job_scraper.py — 采集参数构建单元测试 (27 个用例)
 │
 ├── Dockerfile                # Docker 镜像构建
 ├── docker-compose.yml        # Docker 一键部署
@@ -98,8 +103,12 @@ config.py + data.db   ← 基础设施
 pip install -r requirements.txt
 playwright install chromium
 
-# 2. 配置 API Key (可选，仅 Agent 功能需要)
-# 复制 .env.example 为 .env，写入: DEEPSEEK_API_KEY=你的Key
+# 2. 配置环境变量（.env，仅 Agent / 加固配置需要）
+# 复制 .env.example 为 .env，按需填入:
+#   DEEPSEEK_API_KEY=你的Key         (仅 Agent 问答页面需要)
+#   FLASK_SECRET=64字符随机字符串    (用于 session 和 CSRF token 签名持久化；不填每次启动随机)
+#   FLASK_DEBUG=0 / 1               (默认 0 关闭调试；1 才会显示 Werkzeug 调试器)
+#   FLASK_HOST=127.0.0.1 / 0.0.0.0  (默认 127.0.0.1；0.0.0.0 才对外监听局域网)
 
 # 3. 启动 Web 服务
 python app.py
@@ -111,7 +120,7 @@ python -c "from analysis.jobtitle import classify_batch; print(classify_batch())
 python -c "from modeling.job_clustering import run_clustering; print(run_clustering())"
 python -c "from modeling.salary_predict import train_and_evaluate; print(train_and_evaluate())"
 python -c "from data.fix_duplicate_address import fix_addresses; print(fix_addresses())"
-python -m pytest tests/ -v   # 运行全部测试 (27 个用例)
+python -m pytest tests/ -v   # 运行全部测试 (37 个用例)
 ```
 
 ### 方式二：Docker 部署（推荐用于服务器/长期运行）
@@ -186,3 +195,12 @@ python app.py                      # 访问 http://<服务器IP>:5000
 - `docs:` 文档更新
 - `cleanup:` 清理/删除无用代码
 - `perf:` 性能优化
+
+## 更新日志（Changelog）
+
+- **2026-07-01 · fix: add CSRF protection & harden app.run defaults**
+  - 集成 Flask-WTF CSRFProtect；3 处 POST 表单加入 `csrf_token`
+  - 新增 `app.secret_key`，通过 `FLASK_SECRET` 环境变量持久化
+  - `debug/host` 改为环境变量驱动；默认关 debug、默认监听 `127.0.0.1`
+  - 新增 `tests/test_app_routes.py`（10 个安全回归用例）
+  - 依赖清单新增 `Flask-WTF>=1.0`
