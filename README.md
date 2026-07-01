@@ -33,6 +33,11 @@
 > - **SQLite WAL 模式**：启动时自动启用，并发读不再被写操作锁库
 > - **Agent 参数白名单**：`inspect.signature` 过滤 LLM 幻觉参数，防 TypeError
 > - **分页链接 `url_for()`**：自动 URL 编码，杜绝手动拼接的安全隐患
+>
+> **工程质量**（代码健壮性提升）：
+> - **数据库连接管理**：Flask `g` 对象复用连接 + `teardown_appcontext` 自动关闭，避免连接泄漏
+> - **模型持久化**：joblib 缓存聚类/回归模型到磁盘 (`cache/`)，服务器重启免重训
+> - **日志系统**：`logging` + `RotatingFileHandler` 替代 `print`，分级输出到 `logs/app.log`（5MB 旋转 × 3 备份）
 
 ## 项目结构
 
@@ -75,6 +80,9 @@ project1/
 ├── Dockerfile                # Docker 镜像构建
 ├── docker-compose.yml        # Docker 一键部署
 ├── .dockerignore             # Docker 忽略文件
+│
+├── cache/                    # 模型持久化 (joblib 二进制,切勿手动编辑)
+├── logs/                     # 运行时日志 (gitignore, 5MB 旋转 × 3 备份)
 │
 ├── .env.example              # 环境变量示例 (复制为 .env 填入 Key)
 ├── requirements.txt          # 依赖清单
@@ -202,6 +210,12 @@ python app.py                      # 访问 http://<服务器IP>:5000
 - `perf:` 性能优化
 
 ## 更新日志（Changelog）
+
+- **2026-07-01 · feat: 工程质量提升 — 连接管理 + 模型持久化 + 日志系统**
+  - Flask `g` + `teardown_appcontext` 管理 SQLite 连接，消除每个路由手动 open/close
+  - joblib 持久化聚类和薪资预测模型到 `cache/`，重启免重训
+  - `print` 全面替换为 `logging` + `RotatingFileHandler`，输出到 `logs/app.log`
+  - 依赖清单新增 `joblib>=1.2`；`.gitignore` 新增 `logs/`
 
 - **2026-07-01 · fix: add CSRF protection & harden app.run defaults**
   - 集成 Flask-WTF CSRFProtect；3 处 POST 表单加入 `csrf_token`

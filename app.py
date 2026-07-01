@@ -22,13 +22,36 @@
 import os
 import sqlite3
 import re as _re
+import logging
+from logging.handlers import RotatingFileHandler
 
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, g
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 import config
+
+# --- 日志系统 ----------------------------------------------------------------
+# 同时输出到旋转日志文件(每5MB切一个,保留3个备份)和控制台
+_log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(_log_dir, exist_ok=True)
+
+_logger = logging.getLogger('job_analysis')
+_logger.setLevel(logging.INFO)
+
+_file_handler = RotatingFileHandler(
+    os.path.join(_log_dir, 'app.log'), maxBytes=5 * 1024 * 1024, backupCount=3,
+    encoding='utf-8'
+)
+_file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+))
+_logger.addHandler(_file_handler)
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+_logger.addHandler(_console_handler)
 
 # --- 数据层 ---
 from data.python_job_scraper import scrape_jobs
@@ -78,33 +101,99 @@ except Exception:
 
 PER_PAGE = 12
 
-# 聚类计算(jieba分词+TFIDF+KMeans选k)耗时几秒,在app启动时算一次缓存住,
-# 不要让每次访问页面都重新跑一遍,否则用户体验很差。
-# 薪资预测模型同理,训练好的模型保留在内存里复用。
+
+# --- 数据库连接管理 (Flask g 复用) -----------------------------------------
+def get_db():
+    """获取当前请求上下文中的 SQLite 连接;不存在则创建。
+    连接在整个请求生命周期内复用,teardown 时自动关闭。"""
+    if 'db' not in g:
+        g.db = sqlite3.connect(config.DB_PATH, timeout=10)
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(exception=None):
+    """请求结束时关闭数据库连接,避免连接泄漏。"""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
+
+def _raw_connect():
+    """为非请求上下文(启动预计算等)提供独立连接,调用方自行关闭。"""
+    return sqlite3.connect(config.DB_PATH)
+
+
+# --- 模型持久化 ------------------------------------------------------------
+# 启动时优先从磁盘加载已训练的模型,避免每次重启都重训 (joblib)
+def _load_or_train_models():
+    """尝试加载磁盘缓存的模型;失败或不存在则重训并持久化。"""
+    import joblib as _joblib
+    _cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+    os.makedirs(_cache_dir, exist_ok=True)
+    _cluster_path = os.path.join(_cache_dir, 'clustering_result.joblib')
+    _salary_path = os.path.join(_cache_dir, 'salary_model.joblib')
+
+    if not _has_data():
+        _logger.warning('数据库为空,跳过模型预计算。请先执行数据采集后再使用 /ml 和 Agent 功能。')
+        return None
+
+    # 尝试加载持久化模型
+    cluster = None
+    try:
+        if os.path.exists(_cluster_path):
+            cluster = _joblib.load(_cluster_path)
+            _logger.info('从磁盘加载聚类结果')
+    except Exception as e:
+        _logger.warning('聚类结果加载失败,将重新计算: %s', e)
+
+    try:
+        if os.path.exists(_salary_path):
+            salary_result = _joblib.load(_salary_path)
+            _model_update(salary_result)
+            _logger.info('从磁盘加载薪资预测模型 (R²=%.3f)', salary_result['r2'])
+        else:
+            salary_result = None
+    except Exception as e:
+        _logger.warning('薪资模型加载失败,将重新训练: %s', e)
+        salary_result = None
+
+    # 缺失则训练
+    try:
+        if cluster is None:
+            cluster = job_clustering.run_clustering()
+            _joblib.dump(cluster, _cluster_path)
+            _logger.info('聚类模型已训练并保存到磁盘 (k=%d)', cluster['k'])
+        if salary_result is None:
+            salary_result = salary_predict.train_and_evaluate()
+            _model_update(salary_result)
+            _joblib.dump(salary_result, _salary_path)
+            _logger.info('薪资预测模型已训练并保存到磁盘 (R²=%.3f)', salary_result['r2'])
+    except Exception as e:
+        _logger.error('模型训练失败: %s。部分功能可能不可用。', e)
+        if cluster is None:
+            cluster = None
+
+    return cluster
+
 
 def _has_data():
     """检查数据库中是否有可用的招聘数据。"""
     try:
-        db = sqlite3.connect(config.DB_PATH)
+        db = _raw_connect()
         count = db.cursor().execute("SELECT COUNT(*) FROM data").fetchone()[0]
         db.close()
         return count > 0
     except Exception as e:
-        print(f'[警告] 数据库读取失败: {e}')
+        _logger.warning('数据库读取失败: %s', e)
         return False
 
-print('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
-if not _has_data():
-    print('[警告] 数据库为空,跳过模型预计算。请先执行数据采集后再使用 /ml 和 Agent 功能。')
-    _clustering_result = None
-else:
-    try:
-        _clustering_result = job_clustering.run_clustering()
-        _model_update(salary_predict.train_and_evaluate())   # 注入 modeling.cache,agent 自动共享
-        print('预计算完成。')
-    except Exception as e:
-        print(f'[警告] 模型预计算失败: {e}。部分功能可能不可用。')
-        _clustering_result = None
+
+_logger.info('正在预计算职位聚类和薪资预测模型(只在启动时跑一次)...')
+_clustering_result = _load_or_train_models()
+if _clustering_result is not None:
+    _logger.info('预计算完成。')
 
 
 @app.route('/')
@@ -137,6 +226,8 @@ def list_data():
         params.extend([f'%{c}%' for c in cities])
     where_clause = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
+    db = get_db()
+    cursor = db.cursor()
     cursor.execute(
         f"SELECT post, company, address, salary_min, salary_max, dateT FROM data "
         f"{where_clause} LIMIT ? OFFSET ?",
@@ -145,8 +236,6 @@ def list_data():
     rows = cursor.fetchall()
     cursor.execute(f"SELECT COUNT(*) FROM data {where_clause}", params)
     total = cursor.fetchone()[0]
-
-    db.close()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
     return render_template(
@@ -292,7 +381,7 @@ def collect():
 
     # 先写入临时数据,确认成功后再替换旧数据(原子性保护:
     # 如果写入过程中途失败,旧数据依然保留,不会出现空库)
-    db = sqlite3.connect(config.DB_PATH)
+    db = get_db()
     cursor = db.cursor()
     success = 0
     for j in jobs:
@@ -315,16 +404,23 @@ def collect():
             (success,)
         )
     db.commit()
-    db.close()
 
     # 数据变了,聚类和薪资预测模型(在app启动时算过一次缓存住)
     # 也要跟着重新算一遍,否则 /chart 和 /ml 页面会显示基于旧数据的结果
     global _clustering_result
+    import joblib as _joblib
+    _cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cache')
+    _cluster_path = os.path.join(_cache_dir, 'clustering_result.joblib')
+    _salary_path = os.path.join(_cache_dir, 'salary_model.joblib')
     try:
         _clustering_result = job_clustering.run_clustering()
-        _model_update(salary_predict.train_and_evaluate())  # 同步更新建模缓存
+        _joblib.dump(_clustering_result, _cluster_path)
+        salary_result = salary_predict.train_and_evaluate()
+        _model_update(salary_result)
+        _joblib.dump(salary_result, _salary_path)
+        _logger.info('采集后模型已重新训练并持久化')
     except Exception as e:
-        print(f'[警告] 采集后模型重算失败: {e}')
+        _logger.warning('采集后模型重算失败: %s', e)
 
     return render_template(
         'collect.html', success_count=success, total_count=len(jobs),

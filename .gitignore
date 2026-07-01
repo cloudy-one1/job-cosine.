@@ -47,5 +47,7 @@ htmlcov/
 instance/
 .webassets-cache
 
+logs/
+
 .DS_Store
 Thumbs.db

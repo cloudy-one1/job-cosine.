@@ -18,9 +18,12 @@ import json
 import re
 import time
 import inspect
+import logging
 import requests
 
 from agent.agent_tools import TOOLS
+
+_logger = logging.getLogger('job_analysis.agent')
 
 DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions'
 
@@ -70,7 +73,7 @@ def call_deepseek(messages, api_key, model='deepseek-chat', max_retries=3):
             last_error = e
             if attempt < max_retries:
                 wait = 2 ** attempt  # 2s, 4s, 8s
-                print(f'[Agent] API 调用失败(第{attempt}次),{wait}s后重试: {e}')
+                _logger.warning('API 调用失败(第%d次),%ds后重试: %s', attempt, wait, e)
                 time.sleep(wait)
     raise last_error
 
@@ -114,7 +117,7 @@ def run_agent(user_question, api_key, max_steps=5, verbose=True, llm_call=None):
     for step in range(1, max_steps + 1):
         reply = llm_call(messages)
         if verbose:
-            print(f'--- 第 {step} 轮大模型输出 ---\n{reply}\n')
+            _logger.debug('--- 第 %d 轮大模型输出 ---\n%s', step, reply)
 
         parsed = parse_llm_output(reply)
         messages.append({'role': 'assistant', 'content': reply})
@@ -141,7 +144,7 @@ def run_agent(user_question, api_key, max_steps=5, verbose=True, llm_call=None):
                 result = f'No tool named "{tool_name}". Available tools: {list(TOOLS.keys())}'
             observation = f'Observation: {result}'
             if verbose:
-                print(f'{observation}\n')
+                _logger.debug('%s', observation)
             trace.append({
                 'step': step, 'type': 'action', 'tool': tool_name,
                 'input': tool_input, 'observation': str(result),
