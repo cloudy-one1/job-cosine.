@@ -65,6 +65,7 @@
     {% endif %}
 
     <form method="post" action="/predict">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div style="display:flex; gap:10px; flex-wrap:wrap; max-width:680px;">
             <input type="text" class="form-control" name="city" placeholder="城市,如: 北京" style="flex:1; min-width:120px;">
             <input type="text" class="form-control" name="category" placeholder="职位类别,如: 爬虫工程师" style="flex:1; min-width:150px;">

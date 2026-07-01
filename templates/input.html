@@ -9,6 +9,7 @@
 
 <div class="card fade-up" data-no="NO. 01 · 查询 / 采集入口" style="max-width:480px; margin:30px auto;">
     <form id="mainForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label>岗位名称(支持关键词搜索,非精确匹配)</label>
             <input type="text" class="form-control" name="kw" placeholder="python 开发工程师" autofocus>

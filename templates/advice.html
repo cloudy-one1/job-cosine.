@@ -14,6 +14,7 @@
 
 <div class="card" data-no="提问">
     <form method="post" action="/advice">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-group">
             <label>描述一下你的技能/想了解的方向</label>
             <input type="text" class="form-control" name="question"

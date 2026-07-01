@@ -19,10 +19,12 @@
 运行: python app.py
 访问: http://127.0.0.1:5000
 """
+import os
 import sqlite3
 import re as _re
 
 from flask import Flask, render_template, request, redirect
+from flask_wtf.csrf import CSRFProtect
 
 import config
 
@@ -46,6 +48,15 @@ from modeling.cache import update as _model_update, get as _model_get
 from agent.agent_core import run_agent
 
 app = Flask(__name__)
+
+# --- 安全基础配置 ------------------------------------------------------------
+# secret_key 用于 Flask session 签名与 Flask-WTF CSRF token 校验。
+# 生产环境必须通过 FLASK_SECRET 环境变量注入固定值(否则重启后所有 session/token 失效)。
+app.secret_key = os.environ.get('FLASK_SECRET') or os.urandom(32)
+
+# 启用 Flask-WTF CSRF 保护。所有 POST 表单必须带 {{ csrf_token() }} 隐藏字段,
+# 否则返回 400 Bad Request (防止跨站请求伪造)。
+csrf = CSRFProtect(app)
 
 PER_PAGE = 12
 
@@ -307,11 +318,15 @@ def advice():
 
 
 if __name__ == '__main__':
-    # host='0.0.0.0': 监听所有网络接口,同一局域网内的其他设备可以通过你的局域网IP访问
-    # (默认只监听127.0.0.1,只有本机能访问)
-    # threaded=True: 允许同时处理多个请求,避免/collect这种耗时较长的实时采集
-    # 阻塞了其他人正常浏览页面
-    # debug=True: 保留调试模式,出错时会显示详细的堆栈信息(方便排查问题)
-    # use_reloader=False: 关闭文件变化自动重启,防止IDE保存文件导致正在
-    # 进行的实时采集被中断(采集过程中Flask重启会让浏览器出现ERR_CONNECTION_RESET)
-    app.run(debug=True, host='0.0.0.0', threaded=True, use_reloader=False)
+    # --- 生产安全默认值: debug 关、监听 127.0.0.1 --------------------------------
+    # 需要开启 debug 或对外监听时,通过环境变量显式开启,避免误部署到公网:
+    #   set FLASK_DEBUG=1        (Windows cmd)
+    #   $env:FLASK_DEBUG="1"     (PowerShell)
+    #   export FLASK_DEBUG=1     (Linux/macOS)
+    #   FLASK_HOST=0.0.0.0       (显式开启对外访问,局域网其他设备才能访问)
+    debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    host = os.environ.get('FLASK_HOST', '127.0.0.1')
+
+    # threaded=True: 允许并发处理请求,避免/collect 阻塞其他页面浏览
+    # use_reloader=False: 关闭文件变化自动重启,防止中断正在进行的实时采集
+    app.run(debug=debug, host=host, threaded=True, use_reloader=False)
