@@ -13,8 +13,21 @@
     {% endif %}
 </p>
 
+<!-- 规则 vs 聚类 对比图 -->
+{% if clustering %}
+<div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+    <div class="card" data-no="规则方法分布" style="flex:1; min-width:320px;">
+        <div id="rule_chart" style="width:100%; height:380px;"></div>
+    </div>
+    <div class="card" data-no="KMeans聚类" style="flex:1; min-width:320px;">
+        <div id="cluster_chart" style="width:100%; height:380px;"></div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 规则分类表 + 聚类详情表 -->
 <div style="display:flex; gap:20px; flex-wrap:wrap;">
-    <div class="card" data-no="规则方法" style="flex:1; min-width:280px;">
+    <div class="card" data-no="规则分类" style="flex:1; min-width:280px;">
         <table class="table table-striped">
             <tr><th>类别</th><th>数量</th></tr>
             {% for category, count in rule_based %}
@@ -23,27 +36,34 @@
         </table>
     </div>
     {% if clustering %}
-    <div class="card" data-no="KMeans聚类" style="flex:1; min-width:280px;">
+    <div class="card" data-no="KMeans聚类详情" style="flex:1; min-width:280px;">
         <table class="table table-striped">
-            <tr><th>自动标签</th><th>数量</th></tr>
+            <tr><th>自动标签</th><th>数量</th><th>关键词</th></tr>
             {% for c in clustering.clusters %}
-            <tr><td>{{ c.auto_label }}</td><td class="mono">{{ c.count }}</td></tr>
+            <tr>
+                <td>{{ c.auto_label }}</td>
+                <td class="mono">{{ c.count }}</td>
+                <td style="font-size:12px; color:var(--ink-soft);">{{ c.top_keywords[3:]|join(', ') }}</td>
+            </tr>
             {% endfor %}
         </table>
     </div>
     {% endif %}
 </div>
 
+<!-- 地区分布 -->
 <h2 style="margin-top:36px; margin-bottom:6px;">地区分布(补充分析)</h2>
 <div class="card" data-no="地区">
-    <table class="table table-striped">
+    <div id="region_chart" style="width:100%; height:380px;"></div>
+    <table class="table table-striped" style="margin-top:16px;">
         <tr><th>城市</th><th>职位数</th></tr>
-        {% for city, count in region_data %}
+        {% for city, count in region_data[:10] %}
         <tr><td>{{ city }}</td><td class="mono">{{ count }}</td></tr>
         {% endfor %}
     </table>
 </div>
 
+<!-- 薪资预测 -->
 <h2 style="margin-top:36px; margin-bottom:6px;">薪资预测模型</h2>
 <div class="card" data-no="线性回归">
     {% if model_ready %}
@@ -93,5 +113,123 @@
     </div>
     {% endif %}
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>
+// ---------- 主题色 ----------
+const COLORS = ['#2E6E5E','#A33B2E','#9C7F3F','#5E665A','#7FA89A','#1C2620','#C9A96E','#8B4A3A'];
+const TEXT_COLOR = '#1C2620';
+const SOFT_COLOR = '#5E665A';
+const tip = {
+    backgroundColor: '#FBFAF6',
+    borderColor: '#D7D9CB',
+    textStyle: { color: '#1C2620', fontFamily: "'Noto Sans SC',sans-serif", fontSize: 14 },
+    extraCssText: 'border-radius:2px; box-shadow:0 4px 12px rgba(0,0,0,.08);'
+};
+</script>
+
+{% if clustering %}
+<script>
+// ---------- 规则分类 vs KMeans 聚类 对比柱状图 ----------
+(function(){
+    // 规则
+    var ruleData = {{ rule_based|tojson }};
+    var ruleDom = document.getElementById('rule_chart');
+    if(ruleDom){
+        var rc = echarts.init(ruleDom);
+        rc.setOption({
+            color: COLORS,
+            tooltip: Object.assign({}, tip, {
+                formatter: function(p){ return '<b>' + p.name + '</b><br/>职位数: <b>' + p.value + '</b>'; }
+            }),
+            title: { text: '规则分类分布', left: 'center', top: 4, textStyle: { fontSize:16, fontFamily:"'Noto Serif SC',serif", fontWeight:700, color:TEXT_COLOR } },
+            grid: { left: 100, right: 40, top: 50, bottom: 20 },
+            xAxis: { type: 'value', axisLine:{show:false}, splitLine:{lineStyle:{color:'#EDEFE8'}}, axisLabel:{color:SOFT_COLOR,fontSize:12} },
+            yAxis: {
+                type: 'category',
+                data: ruleData.map(function(d){ return d[0]; }).reverse(),
+                axisLine: { lineStyle:{color:'#D7D9CB'} }, axisTick: {show:false},
+                axisLabel: { color:TEXT_COLOR, fontSize:13, fontWeight:500 },
+                inverse: true
+            },
+            series: [{
+                type: 'bar',
+                data: ruleData.map(function(d){ return d[1]; }).reverse(),
+                barWidth: '60%',
+                itemStyle: { borderRadius: [0,4,4,0] },
+                label: { show:true, position:'right', color:SOFT_COLOR, fontSize:12 }
+            }]
+        });
+        window.addEventListener('resize',function(){ rc.resize(); });
+    }
+
+    // 聚类
+    var clustData = {{ clustering.clusters|tojson }};
+    var cDom = document.getElementById('cluster_chart');
+    if(cDom){
+        var cc = echarts.init(cDom);
+        cc.setOption({
+            color: COLORS,
+            tooltip: Object.assign({}, tip, {
+                formatter: function(p){ return '<b>' + p.name + '</b><br/>职位数: <b>' + p.value + '</b>'; }
+            }),
+            title: { text: 'KMeans 聚类 (k=' + {{ clustering.k }} + ')', left: 'center', top: 4, textStyle: { fontSize:16, fontFamily:"'Noto Serif SC',serif", fontWeight:700, color:TEXT_COLOR } },
+            grid: { left: 100, right: 40, top: 50, bottom: 20 },
+            xAxis: { type: 'value', axisLine:{show:false}, splitLine:{lineStyle:{color:'#EDEFE8'}}, axisLabel:{color:SOFT_COLOR,fontSize:12} },
+            yAxis: {
+                type: 'category',
+                data: clustData.map(function(d){ return d.auto_label; }).reverse(),
+                axisLine: { lineStyle:{color:'#D7D9CB'} }, axisTick: {show:false},
+                axisLabel: { color:TEXT_COLOR, fontSize:12, fontWeight:500 },
+                inverse: true
+            },
+            series: [{
+                type: 'bar',
+                data: clustData.map(function(d){ return d.count; }).reverse(),
+                barWidth: '60%',
+                itemStyle: { borderRadius: [0,4,4,0] },
+                label: { show:true, position:'right', color:SOFT_COLOR, fontSize:12 }
+            }]
+        });
+        window.addEventListener('resize',function(){ cc.resize(); });
+    }
+})();
+</script>
+{% endif %}
+
+<script>
+// ---------- 地区分布横向柱状图 ----------
+(function(){
+    var data = {{ region_data|tojson }};
+    var dom = document.getElementById('region_chart');
+    if(dom){
+        var chart = echarts.init(dom);
+        chart.setOption({
+            color: COLORS,
+            tooltip: Object.assign({}, tip, {
+                formatter: function(p){ return '<b>' + p.name + '</b><br/>职位数: <b>' + p.value + '</b>'; }
+            }),
+            grid: { left: 80, right: 50, top: 10, bottom: 20 },
+            xAxis: { type: 'value', axisLine:{show:false}, splitLine:{lineStyle:{color:'#EDEFE8'}}, axisLabel:{color:SOFT_COLOR,fontSize:12} },
+            yAxis: {
+                type: 'category',
+                data: data.slice(0,12).map(function(d){ return d[0]; }).reverse(),
+                axisLine: { lineStyle:{color:'#D7D9CB'} }, axisTick: {show:false},
+                axisLabel: { color:TEXT_COLOR, fontSize:13, fontWeight:500 },
+                inverse: true
+            },
+            series: [{
+                type: 'bar',
+                data: data.slice(0,12).map(function(d){ return d[1]; }).reverse(),
+                barWidth: '60%',
+                itemStyle: { borderRadius: [0,4,4,0] },
+                label: { show:true, position:'right', color:SOFT_COLOR, fontSize:12 },
+                emphasis: { itemStyle: { color: '#A33B2E' } }
+            }]
+        });
+        window.addEventListener('resize',function(){ chart.resize(); });
+    }
+})();
+</script>
 
 {% endblock %}

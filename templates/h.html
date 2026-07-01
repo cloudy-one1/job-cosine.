@@ -4,10 +4,12 @@
 <p class="eyebrow">案卷 NO. 03 · 图表分析</p>
 <h2 style="margin-bottom:20px;">招聘数据可视化</h2>
 
+<!-- 薪资分布 -->
 <div class="card" data-no="薪资分布">
-    <div id="salary_chart" style="width:100%; height:380px;"></div>
+    <div id="salary_chart" style="width:100%; height:400px;"></div>
 </div>
 
+<!-- 学历 + 经验 (并排) -->
 <div style="display:flex; gap:20px; margin-top:20px; flex-wrap:wrap;">
     <div class="card" data-no="学历占比" style="flex:1; min-width:280px;">
         <div id="xueli_chart" style="width:100%; height:380px;"></div>
@@ -17,36 +19,170 @@
     </div>
 </div>
 
-<script src="https://code.highcharts.com/highcharts.js"></script>
+<!-- 城市分布 -->
+<div class="card" data-no="城市分布" style="margin-top:20px;">
+    <div id="city_chart" style="width:100%; height:420px;"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script>
-Highcharts.setOptions({
-    colors: ['#2E6E5E', '#A33B2E', '#9C7F3F', '#5E665A', '#7FA89A', '#1C2620'],
-    chart: { backgroundColor: 'transparent', style: { fontFamily: "'Noto Sans SC', sans-serif" } },
-    title: { style: { fontFamily: "'Noto Serif SC', serif", color: '#1C2620' } }
-});
+// ---------- 主题色 ----------
+const COLORS = ['#2E6E5E','#A33B2E','#9C7F3F','#5E665A','#7FA89A','#1C2620','#C9A96E','#8B4A3A'];
+const TEXT_COLOR = '#1C2620';
+const SOFT_COLOR = '#5E665A';
 
-Highcharts.chart('salary_chart', {
-    chart: { type: 'column' },
-    title: { text: '薪资分布图' },
-    subtitle: { text: '数据来源: 51job实时采集' },
-    xAxis: {
-        categories: ['小于5k','5k~8k','8k~11k','11k~14k','14k~17k','17k~20k','20k~23k','23k以上']
-    },
-    yAxis: { title: { text: '职位数' } },
-    series: [{ name: '职位数', data: {{ xz|tojson }} }]
-});
+// 通用 tooltip
+const tip = {
+    backgroundColor: '#FBFAF6',
+    borderColor: '#D7D9CB',
+    textStyle: { color: '#1C2620', fontFamily: "'Noto Sans SC',sans-serif", fontSize: 14 },
+    extraCssText: 'border-radius:2px; box-shadow:0 4px 12px rgba(0,0,0,.08);'
+};
 
-Highcharts.chart('xueli_chart', {
-    chart: { type: 'pie' },
-    title: { text: '学历占比情况' },
-    series: [{ name: '学历', type: 'pie', data: {{ xl|tojson }} }]
-});
+// ---------- 1. 薪资分布柱状图 ----------
+(function(){
+    var dom = document.getElementById('salary_chart');
+    var chart = echarts.init(dom);
+    var cats = ['<5k','5-8k','8-11k','11-14k','14-17k','17-20k','20-23k','23k+'];
+    var vals = {{ xz|tojson }};
+    chart.setOption({
+        color: COLORS,
+        tooltip: Object.assign({}, tip, {
+            formatter: function(p){ return '<b>' + cats[p.dataIndex] + '</b><br/>职位数: <b>' + p.value + '</b>'; }
+        }),
+        grid: { left: 50, right: 30, top: 60, bottom: 40 },
+        xAxis: {
+            type: 'category', data: cats,
+            axisLine: { lineStyle: { color: '#D7D9CB' } },
+            axisTick: { show: false },
+            axisLabel: { color: SOFT_COLOR, fontSize: 13 }
+        },
+        yAxis: {
+            type: 'value', name: '职位数',
+            nameTextStyle: { color: SOFT_COLOR, fontSize: 12 },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { lineStyle: { color: '#EDEFE8' } },
+            axisLabel: { color: SOFT_COLOR, fontSize: 12 }
+        },
+        series: [{
+            type: 'bar', data: vals,
+            barWidth: '55%',
+            itemStyle: {
+                borderRadius: [4,4,0,0],
+                color: function(p){
+                    return COLORS[p.dataIndex % COLORS.length];
+                }
+            },
+            emphasis: {
+                itemStyle: { color: '#A33B2E' }
+            },
+            label: {
+                show: true, position: 'top',
+                color: SOFT_COLOR, fontSize: 12, fontWeight: 600
+            }
+        }]
+    });
+    window.addEventListener('resize', function(){ chart.resize(); });
+})();
 
-Highcharts.chart('jinyan_chart', {
-    chart: { type: 'pie' },
-    title: { text: '工作经验要求占比' },
-    series: [{ name: '经验', type: 'pie', data: {{ jy|tojson }} }]
-});
+// ---------- 2. 学历环形图 ----------
+(function(){
+    var dom = document.getElementById('xueli_chart');
+    var chart = echarts.init(dom);
+    var data = {{ xl|tojson }};
+    chart.setOption({
+        color: COLORS,
+        tooltip: Object.assign({}, tip, {
+            formatter: function(p){ return '<b>' + p.name + '</b><br/>' + p.value + ' 个职位 (' + p.percent + '%)'; }
+        }),
+        title: { text: '学历占比', left: 'center', top: 8, textStyle: { fontSize: 16, fontFamily: "'Noto Serif SC',serif", fontWeight: 700, color: TEXT_COLOR } },
+        series: [{
+            type: 'pie', radius: ['45%', '72%'], center: ['50%','55%'],
+            data: data.map(function(d){ return { name: d[0], value: d[1] }; }),
+            emphasis: {
+                itemStyle: { shadowBlur: 12, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,.2)' },
+                label: { fontSize: 16, fontWeight: 'bold' }
+            },
+            label: { color: SOFT_COLOR, fontSize: 12 },
+            itemStyle: { borderColor: '#EDEFE8', borderWidth: 2 }
+        }]
+    });
+    window.addEventListener('resize', function(){ chart.resize(); });
+})();
+
+// ---------- 3. 经验环形图 ----------
+(function(){
+    var dom = document.getElementById('jinyan_chart');
+    var chart = echarts.init(dom);
+    var data = {{ jy|tojson }};
+    chart.setOption({
+        color: COLORS,
+        tooltip: Object.assign({}, tip, {
+            formatter: function(p){ return '<b>' + p.name + '</b><br/>' + p.value + ' 个职位 (' + p.percent + '%)'; }
+        }),
+        title: { text: '经验要求占比', left: 'center', top: 8, textStyle: { fontSize: 16, fontFamily: "'Noto Serif SC',serif", fontWeight: 700, color: TEXT_COLOR } },
+        series: [{
+            type: 'pie', radius: ['45%', '72%'], center: ['50%','55%'],
+            data: data.map(function(d){ return { name: d[0], value: d[1] }; }),
+            emphasis: {
+                itemStyle: { shadowBlur: 12, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,.2)' },
+                label: { fontSize: 16, fontWeight: 'bold' }
+            },
+            label: { color: SOFT_COLOR, fontSize: 12 },
+            itemStyle: { borderColor: '#EDEFE8', borderWidth: 2 }
+        }]
+    });
+    window.addEventListener('resize', function(){ chart.resize(); });
+})();
+
+// ---------- 4. 城市分布横向柱状图 ----------
+(function(){
+    var dom = document.getElementById('city_chart');
+    var chart = echarts.init(dom);
+    var data = {{ city_data|tojson }};
+    // data: [[city, count], ...]
+    var cities = data.map(function(d){ return d[0]; });
+    var counts = data.map(function(d){ return d[1]; });
+
+    chart.setOption({
+        color: COLORS,
+        tooltip: Object.assign({}, tip, {
+            formatter: function(p){ return '<b>' + p.name + '</b><br/>职位数: <b>' + p.value + '</b>'; }
+        }),
+        grid: { left: 80, right: 50, top: 50, bottom: 20 },
+        title: { text: '城市职位数量分布', left: 'center', top: 6, textStyle: { fontSize: 16, fontFamily:"'Noto Serif SC',serif", fontWeight:700, color:TEXT_COLOR } },
+        xAxis: {
+            type: 'value', name: '职位数',
+            nameTextStyle: { color: SOFT_COLOR, fontSize: 12 },
+            axisLine: { show: false },
+            splitLine: { lineStyle: { color: '#EDEFE8' } },
+            axisLabel: { color: SOFT_COLOR, fontSize: 12 }
+        },
+        yAxis: {
+            type: 'category', data: cities.reverse(),
+            axisLine: { lineStyle: { color: '#D7D9CB' } },
+            axisTick: { show: false },
+            axisLabel: { color: TEXT_COLOR, fontSize: 13, fontWeight: 500 },
+            inverse: true
+        },
+        series: [{
+            type: 'bar', data: counts.reverse(),
+            barWidth: '60%',
+            itemStyle: {
+                borderRadius: [0,4,4,0],
+                color: function(p){
+                    return COLORS[p.dataIndex % COLORS.length];
+                }
+            },
+            label: {
+                show: true, position: 'right',
+                color: SOFT_COLOR, fontSize: 12, fontWeight: 600
+            }
+        }]
+    });
+    window.addEventListener('resize', function(){ chart.resize(); });
+})();
 </script>
 
 {% endblock %}

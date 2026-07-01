@@ -67,15 +67,19 @@ project1/
 │   ├── agent_core.py            — 手写 ReAct 推理循环 (Reason + Act)
 │   └── agent_tools.py           — 工具注册与查询函数 (6 个可调用工具)
 │
-├── templates/                # HTML 模板 (7 个页面)
+├── templates/                # HTML 模板 (7 个页面, ECharts 可视化)
 │   ├── base.html, input.html, data.html
-│   ├── h.html, ml.html, advice.html
-│   └── collect.html
+│   ├── h.html (薪资柱状+学历环形+经验环形+城市横向柱状)
+│   ├── ml.html (规则vs聚类对比图+城市分布图)
+│   ├── advice.html, collect.html
 │
-├── tests/                    # 测试
-│   ├── test_app_routes.py       — 路由与安全回归测试 (10 个用例：CSRF/secret_key/debug+host/页码容错)
+├── tests/                    # 测试 (70 个用例)
+│   ├── test_app_routes.py       — 路由与安全回归测试 (14 个用例)
 │   ├── test_agent_loop.py       — Agent 逻辑集成测试 (假 LLM 存根)
-│   └── test_python_job_scraper.py — 采集参数构建单元测试 (27 个用例)
+│   ├── test_python_job_scraper.py — 采集参数构建单元测试 (27 个用例)
+│   ├── test_salary_parser.py    — 薪资解析全覆盖测试 (20 个用例: 面议/万/千/年/日/·薪)
+│   ├── test_analysis_functions.py — classify/extract_city/tokenize/_fuzzy_match (25 个用例)
+│   └── test_model_logic.py      — 聚类/预测模型核心逻辑测试 (8 个用例, mock DB)
 │
 ├── Dockerfile                # Docker 镜像构建
 ├── docker-compose.yml        # Docker 一键部署
@@ -210,6 +214,13 @@ python app.py                      # 访问 http://<服务器IP>:5000
 - `perf:` 性能优化
 
 ## 更新日志（Changelog）
+
+- **2026-07-01 · feat: 测试覆盖 + ECharts 可视化**
+  - 新增 3 个测试文件：`test_salary_parser.py`(20), `test_analysis_functions.py`(25), `test_model_logic.py`(8)
+  - 测试总用例从 51 增至 70，覆盖薪资解析 / 职位分类 / 分词 / 聚类选 k / 模糊匹配
+  - `/chart` 页面全面升级 ECharts（替代 Highcharts）：柱状图+环形图+城市横向柱状图
+  - `/ml` 页面新增规则 vs KMeans 聚类对比图和城市分布图
+  - `/chart` 路由新增 `city_data` 传参，城市分布可视图表化
 
 - **2026-07-01 · feat: 工程质量提升 — 连接管理 + 模型持久化 + 日志系统**
   - Flask `g` + `teardown_appcontext` 管理 SQLite 连接，消除每个路由手动 open/close

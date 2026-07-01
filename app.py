@@ -249,7 +249,8 @@ def chart():
     xz = xinzi.xinzi()
     xl = xueli.xuelifun()
     jy = jinyan.jinyanfun()
-    return render_template('h.html', xz=xz, xl=xl, jy=jy)
+    city_data = region.regionfun()
+    return render_template('h.html', xz=xz, xl=xl, jy=jy, city_data=city_data)
 
 
 def _safe_model_metrics(mc):
