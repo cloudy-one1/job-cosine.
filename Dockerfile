@@ -1,51 +1,34 @@
-# 招聘数据分析平台 Docker 镜像
+# 招聘数据分析平台 Docker 镜像（纯 Web 服务，不含爬虫）
+#
+# 架构说明：
+#   - 数据采集（Playwright Chromium）在宿主机本机运行 → 写入 data.db
+#   - Docker 容器只负责 Flask Web 展示 + ML 模型 + Agent 推理
+#   - 两者通过 volume 挂载共享同一个 data.db
+#
 # 构建: docker build -t job-analysis .
 # 运行: docker run -p 5000:5000 -v $(pwd)/data.db:/app/data.db --env-file .env job-analysis
 
 FROM python:3.11-slim
 
-# Playwright 需要的系统依赖
+# 最小系统依赖（仅 SSL 证书）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
     ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libu2f-udev \
-    libvulkan1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# 先安装 Python 依赖 (利用 Docker 缓存层)
+# 先安装 Python 依赖（利用 Docker 缓存层）
+# playwright 包仅安装 Python 绑定（import 不报错），不下载 Chromium 浏览器
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
-# 安装 Playwright Chromium
-RUN python -m playwright install chromium
-RUN python -m playwright install-deps chromium
 
 # 复制项目代码
 COPY . .
 
-# SQLite 数据持久化: data.db 作为 volume 挂载，首次启动自动创建
+# SQLite 数据持久化：data.db 由宿主机采集后 volume 挂载
+# 首次部署会自动创建空表
 VOLUME ["/app/data.db"]
 
 EXPOSE 5000
 
-# 生产环境用 gunicorn 替代 Flask 内置服务器
 CMD ["python", "app.py"]

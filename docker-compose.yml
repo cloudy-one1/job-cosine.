@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   job-analysis:
     build: .
@@ -7,12 +5,10 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      # SQLite 数据持久化 (宿主机 data.db 映射到容器)
+      # SQLite 数据持久化（宿主机采集 data.db → 容器读）
       - ./data.db:/app/data.db
-      # CSV 数据文件 (fresh_job_data.csv 等)
-      - ./fresh_job_data.csv:/app/fresh_job_data.csv
     env_file:
-      # 可选: 配置 DEEPSEEK_API_KEY
+      # 可选：配置 DEEPSEEK_API_KEY
       - .env
     environment:
       - TZ=Asia/Shanghai

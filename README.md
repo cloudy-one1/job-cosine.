@@ -94,7 +94,13 @@ python test_agent_loop.py       # Agent 逻辑测试
 
 ## Docker 部署
 
+> **架构分工**：数据采集（Playwright Chromium）依赖真实浏览器指纹对抗 WAF，因此采集在宿主机本地执行 → 写入 `data.db`；Docker 容器仅负责 Web 展示 + 模型 + Agent，通过 volume 挂载共享同一个 `data.db`。镜像体积约 300MB（不含 Chromium）。
+
 ```bash
+# 1. 先在本地采集一次数据 (Playwright 需要真实 Chrome 指纹)
+python -c "from data.python_job_scraper import scrape_jobs; scrape_jobs()"
+
+# 2. 启动 Docker 容器 (纯 Web 服务，不含爬虫)
 # 方式一: docker-compose (推荐)
 docker-compose up -d
 # 访问 http://localhost:5000
@@ -106,11 +112,24 @@ docker run -d -p 5000:5000 \
   --env-file .env \
   job-analysis
 
+# 后续更新数据：宿主机重新采集，无需重启容器 (共享 data.db)
+
 # 虚拟机部署 (需要 Python 3.10+)
 git clone <repo-url> && cd project1
 pip install -r requirements.txt
 playwright install chromium     # 采集数据需要
 python app.py                   # 访问 http://<vm-ip>:5000
+```
+
+### 镜像源配置 (国内网络)
+
+若 Docker Hub 连接超时，在 Docker Desktop → Settings → Docker Engine 中添加镜像源：
+
+```json
+"registry-mirrors": [
+  "https://docker.1ms.run",
+  "https://docker.xuanyuan.me"
+]
 ```
 
 ## Web 页面
