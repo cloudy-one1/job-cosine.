@@ -115,7 +115,7 @@ def scrape_jobs(keyword, cities, pages_per_city=3, progress_callback=None):
           (post, company, address, salary_raw, edu, exper, dateT, scrape_date)
 
     注意: 这个函数会真的打开一个无头浏览器访问51job,耗时通常是
-          "10秒左右过WAF" + "每页约1秒",城市越多、页数越多越慢。
+          "5~10秒过WAF" + "每页约0.3秒",城市越多、页数越多越慢。
           调用方(比如Flask路由)要注意这是同步阻塞调用,不要在每个普通请求里
           都触发,只应该作为一个用户主动点击的"实时采集"动作。
     """
@@ -154,21 +154,31 @@ def scrape_jobs(keyword, cities, pages_per_city=3, progress_callback=None):
         )
         page.goto(search_url, timeout=30000, wait_until='domcontentloaded')
 
-        for _ in range(30):
+        # WAF验证等待: 前10轮每0.5s查一次(5s),后20轮每1s查一次(20s),最多等25s
+        for i in range(10):
             try:
                 cnt = page.evaluate("document.querySelectorAll('.joblist-item').length")
                 if cnt >= 1:
                     break
             except Exception:
                 pass
-            time.sleep(1)
+            time.sleep(0.5)
+        else:
+            for i in range(20):
+                try:
+                    cnt = page.evaluate("document.querySelectorAll('.joblist-item').length")
+                    if cnt >= 1:
+                        break
+                except Exception:
+                    pass
+                time.sleep(1)
 
         now = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
         for city, code in valid_cities:
             for pg in range(1, pages_per_city + 1):
                 params = build_api_params(keyword, code, pg)
-                time.sleep(random.uniform(0.5, 1.5))
+                time.sleep(random.uniform(0.1, 0.3))
                 data = page.evaluate(JS_FETCH_API, params)
 
                 if isinstance(data, dict) and 'error' in data:
