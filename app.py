@@ -474,13 +474,13 @@ def inject_globals():
 
 
 if __name__ == '__main__':
-    # --- 开发模式默认开启 debug（模板热更新）--------------------------------
-    # 生产环境部署通过环境变量关闭:
-    #   $env:FLASK_DEBUG="0"       (PowerShell, 关闭 debug)
-    #   set FLASK_DEBUG=0          (Windows cmd)
-    #   export FLASK_DEBUG=0       (Linux/macOS)
-    #   FLASK_HOST=0.0.0.0         (显式开启对外访问,局域网其他设备才能访问)
-    debug = os.environ.get('FLASK_DEBUG', '1') == '1'
+    # --- 启动配置 ---------------------------------------------------------------
+    # 关闭 debug 以避免 Flask 强制开启 reloader（reloader 会把 print 输出转到子进程，
+    # 导致终端看不到本地/局域网地址提示，且子进程退出后端口立即释放）。
+    # 需要 debug 自动热更新时显式开启:
+    #   $env:FLASK_DEBUG="1"  →  改 templates 后手动 Ctrl+C 重启即可(本项目改动不多)
+    #   FLASK_HOST=0.0.0.0    →  显式开启对外访问,局域网其他设备才能访问
+    debug = os.environ.get('FLASK_DEBUG', '0') == '1'
     host = os.environ.get('FLASK_HOST', '127.0.0.1')
 
     # threaded=True: 允许并发处理请求,避免/collect 阻塞其他页面浏览
