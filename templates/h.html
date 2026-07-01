@@ -98,7 +98,9 @@ const tip = {
         }),
         title: { text: '学历占比', left: 'center', top: 8, textStyle: { fontSize: 16, fontFamily: "'Noto Serif SC',serif", fontWeight: 700, color: TEXT_COLOR } },
         series: [{
-            type: 'pie', radius: '68%', center: ['50%','55%'],
+            type: 'pie',
+            radius: ['0%', '70%'],
+            center: ['50%', '55%'],
             data: data.map(function(d){ return { name: d[0], value: d[1] }; }),
             emphasis: {
                 itemStyle: { shadowBlur: 12, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,.2)' },
@@ -127,7 +129,9 @@ const tip = {
         }),
         title: { text: '经验要求占比', left: 'center', top: 8, textStyle: { fontSize: 16, fontFamily: "'Noto Serif SC',serif", fontWeight: 700, color: TEXT_COLOR } },
         series: [{
-            type: 'pie', radius: '68%', center: ['50%','55%'],
+            type: 'pie',
+            radius: ['0%', '70%'],
+            center: ['50%', '55%'],
             data: data.map(function(d){ return { name: d[0], value: d[1] }; }),
             emphasis: {
                 itemStyle: { shadowBlur: 12, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,.2)' },
@@ -136,7 +140,6 @@ const tip = {
             label: {
                 color: SOFT_COLOR, fontSize: 12,
                 formatter: function(p){
-                    // 小于 3% 的扇区不画引导线标签,避免重叠
                     return p.percent < 3 ? '' : p.name + '\n' + p.percent + '%';
                 }
             },

@@ -454,15 +454,26 @@ def inject_globals():
 
 
 if __name__ == '__main__':
-    # --- 生产安全默认值: debug 关、监听 127.0.0.1 --------------------------------
-    # 需要开启 debug 或对外监听时,通过环境变量显式开启,避免误部署到公网:
-    #   set FLASK_DEBUG=1        (Windows cmd)
-    #   $env:FLASK_DEBUG="1"     (PowerShell)
-    #   export FLASK_DEBUG=1     (Linux/macOS)
-    #   FLASK_HOST=0.0.0.0       (显式开启对外访问,局域网其他设备才能访问)
-    debug = os.environ.get('FLASK_DEBUG', '0') == '1'
+    # --- 开发模式默认开启 debug（模板热更新）--------------------------------
+    # 生产环境部署通过环境变量关闭:
+    #   $env:FLASK_DEBUG="0"       (PowerShell, 关闭 debug)
+    #   set FLASK_DEBUG=0          (Windows cmd)
+    #   export FLASK_DEBUG=0       (Linux/macOS)
+    #   FLASK_HOST=0.0.0.0         (显式开启对外访问,局域网其他设备才能访问)
+    debug = os.environ.get('FLASK_DEBUG', '1') == '1'
     host = os.environ.get('FLASK_HOST', '127.0.0.1')
 
     # threaded=True: 允许并发处理请求,避免/collect 阻塞其他页面浏览
     # use_reloader=False: 关闭文件变化自动重启,防止中断正在进行的实时采集
+    port = 5000
+    print(f"\n  → 本地访问: http://127.0.0.1:{port}")
+    try:
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('10.254.254.254', 1))
+        lan_ip = s.getsockname()[0]
+        s.close()
+        print(f"  → 局域网访问: http://{lan_ip}:{port}    (同局域网设备可用)\n")
+    except Exception:
+        print()
     app.run(debug=debug, host=host, threaded=True, use_reloader=False)
