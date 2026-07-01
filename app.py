@@ -26,15 +26,22 @@ import warnings
 # 消掉 jieba → pkg_resources 的弃用警告
 warnings.filterwarnings('ignore', message='pkg_resources is deprecated', category=UserWarning)
 
-# 预导入 pkg_resources → jieba：
-# jieba._compat 依赖 pkg_resources，首次运行时 pkg_resources 需扫描
-# 全量已安装包（~168行类定义），在 VSCode 终端中耗时较长，容易误判为卡死。
+# 预导入重依赖（pkg_resources / jieba / sklearn）：
+# 1) jieba._compat 依赖 pkg_resources，首次运行 pkg_resources 需扫描
+#    全量已安装包（~168行类定义），耗时较长
+# 2) sklearn 首次 import 时需要为 numpy/sklearn 的 .py 编译生成 .pyc 缓存
+#    （_bootstrap_external._compile_bytecode），单次可能耗时 3-10 秒
+# 这两步在 VSCode 终端中容易让用户误判为卡死。
 # 此处显式打印进度，让用户知道服务器正在初始化而非死锁。
-print("正在初始化依赖 (首次运行较慢，请稍候)...", flush=True)
+print("[1/3] 正在加载 pkg_resources...", flush=True)
 import pkg_resources as _pr
 del _pr
+print("[2/3] 正在加载 jieba (首次需要分词词典初始化)...", flush=True)
 import jieba as _jb
 del _jb
+print("[3/3] 正在加载 sklearn (首次需编译大量 .pyc, 请耐心等待)...", flush=True)
+import sklearn as _sk
+del _sk
 print("依赖加载完成。\n", flush=True)
 
 import sqlite3
