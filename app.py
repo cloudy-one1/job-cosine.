@@ -20,6 +20,20 @@
 访问: http://127.0.0.1:5000
 """
 import os
+import sys
+import warnings
+
+# 消掉 jieba → pkg_resources 的弃用警告
+warnings.filterwarnings('ignore', message='pkg_resources is deprecated', category=UserWarning)
+
+# 预导入 pkg_resources：避免 jieba 在 VSCode 首次运行时因
+# pkg_resources 延迟初始化导致线程死锁（二次运行正常）。
+try:
+    import pkg_resources as _pr
+    del _pr
+except Exception:
+    pass
+
 import sqlite3
 import re as _re
 import logging
