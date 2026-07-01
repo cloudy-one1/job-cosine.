@@ -69,7 +69,7 @@ project1/
 │
 ├── templates/                # HTML 模板 (7 个页面, ECharts 可视化)
 │   ├── base.html, input.html, data.html
-│   ├── h.html (薪资柱状+学历环形+经验环形+城市横向柱状)
+│   ├── h.html (薪资柱状+学历饼图+经验饼图+城市横向柱状)
 │   ├── ml.html (规则vs聚类对比图+城市分布图)
 │   ├── advice.html, collect.html
 │
@@ -218,7 +218,7 @@ python app.py                      # 访问 http://<服务器IP>:5000
 - **2026-07-01 · feat: 测试覆盖 + ECharts 可视化**
   - 新增 3 个测试文件：`test_salary_parser.py`(20), `test_analysis_functions.py`(25), `test_model_logic.py`(8)
   - 测试总用例从 51 增至 70，覆盖薪资解析 / 职位分类 / 分词 / 聚类选 k / 模糊匹配
-  - `/chart` 页面全面升级 ECharts（替代 Highcharts）：柱状图+环形图+城市横向柱状图
+  - `/chart` 页面全面升级 ECharts（替代 Highcharts）：柱状图+饼图+城市横向柱状图
   - `/ml` 页面新增规则 vs KMeans 聚类对比图和城市分布图
   - `/chart` 路由新增 `city_data` 传参，城市分布可视图表化
 
