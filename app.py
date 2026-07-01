@@ -26,17 +26,16 @@ import warnings
 # 消掉 jieba → pkg_resources 的弃用警告
 warnings.filterwarnings('ignore', message='pkg_resources is deprecated', category=UserWarning)
 
-# 预导入 pkg_resources + jieba：
-# jieba → _compat → pkg_resources 在 VSCode 首次运行时 pkg_resources
-# 的全量包扫描可能卡死（二次运行因 .pyc 缓存正常）。
-# 在顶部一次性完成整个导入链，避免后续 import jieba 时死锁。
-try:
-    import pkg_resources as _pr
-    del _pr
-    import jieba as _jb
-    del _jb
-except Exception:
-    pass
+# 预导入 pkg_resources → jieba：
+# jieba._compat 依赖 pkg_resources，首次运行时 pkg_resources 需扫描
+# 全量已安装包（~168行类定义），在 VSCode 终端中耗时较长，容易误判为卡死。
+# 此处显式打印进度，让用户知道服务器正在初始化而非死锁。
+print("正在初始化依赖 (首次运行较慢，请稍候)...", flush=True)
+import pkg_resources as _pr
+del _pr
+import jieba as _jb
+del _jb
+print("依赖加载完成。\n", flush=True)
 
 import sqlite3
 import re as _re
