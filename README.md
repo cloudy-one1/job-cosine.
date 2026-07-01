@@ -215,6 +215,12 @@ python app.py                      # 访问 http://<服务器IP>:5000
 
 ## 更新日志（Changelog）
 
+- **2026-07-01 · fix: 饼图修复 + debug默认开启 + pkg_resources预导入**
+  - 学历/经验图从环形→完整饼图（`radius: ['0%','70%']`）
+  - `FLASK_DEBUG` 默认开启，模板改动自动热更新，无需手动重启
+  - 恢复启动时终端打印本地+局域网访问地址
+  - 预导入 `pkg_resources`，修复 VSCode 首次运行 jieba 导入卡死
+
 - **2026-07-01 · feat: 测试覆盖 + ECharts 可视化**
   - 新增 3 个测试文件：`test_salary_parser.py`(20), `test_analysis_functions.py`(25), `test_model_logic.py`(8)
   - 测试总用例从 51 增至 70，覆盖薪资解析 / 职位分类 / 分词 / 聚类选 k / 模糊匹配
